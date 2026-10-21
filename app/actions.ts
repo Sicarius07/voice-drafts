@@ -39,7 +39,7 @@ export const allowTell = async (voiceId: string, category: string) => run((u) =>
 export const changeRule = async (ruleId: string, action: learning.RuleAction) =>
   run((u) => learning.ruleAction(u, ruleId, z.enum(["confirm", "archive", "undo", "restore"]).parse(action)));
 
-const Params = z.object({ phrase: z.string().max(60).optional(), n: z.number().int().min(40).max(280).optional(), note: z.string().max(140).optional() });
+const Params = z.object({ phrase: z.string().max(60).optional(), n: z.number().int().min(40).optional(), note: z.string().max(140).optional() });
 
 export const editRule = async (ruleId: string, params: RuleParams) => run((u) => learning.updateRule(u, ruleId, Params.parse(params)));
 

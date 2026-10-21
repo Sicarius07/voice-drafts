@@ -6,7 +6,7 @@ export type Stats = {
   n: number;
   quoteRate: number;
   span: { from: string; to: string } | null;
-  length: { p10: number; p50: number; p90: number };
+  length: { mean: number; p10: number; p50: number; p90: number };
   medianWords: number;
   medianSentences: number;
   /** Share of posts with each binary feature (raw, 0..1). */
@@ -40,7 +40,7 @@ export function computeStats(posts: CorpusPost[]): Stats {
     n,
     quoteRate: n ? posts.filter((p) => p.kind === "quote").length / n : 0,
     span: dates.length ? { from: new Date(dates[0]).toISOString(), to: new Date(dates.at(-1)!).toISOString() } : null,
-    length: { p10: quantile(lengths, 0.1), p50: quantile(lengths, 0.5), p90: quantile(lengths, 0.9) },
+    length: { mean: n ? lengths.reduce((a, b) => a + b, 0) / n : 0, p10: quantile(lengths, 0.1), p50: quantile(lengths, 0.5), p90: quantile(lengths, 0.9) },
     medianWords: quantile(col((f) => f.words), 0.5),
     medianSentences: quantile(col((f) => f.sentences), 0.5),
     rates,

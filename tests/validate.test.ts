@@ -4,9 +4,8 @@ import { cleanup, nearCopy, validate } from "@/lib/generate/validate";
 describe("validate", () => {
   const ctx = { notes: "", corpus: ["the best founders ship small things every single day without asking anyone"] };
 
-  it("catches length, near-copies and unknown brackets", () => {
+  it("catches near-copies and unknown brackets", () => {
     const codes = (t: string) => validate(t, ctx).errors.map((e) => e.code);
-    expect(codes("x".repeat(281))).toContain("length");
     expect(codes("honestly the best founders ship small things every single day without asking")).toContain("near_copy");
     expect(codes("hi [Your Name]")).toContain("placeholder");
     expect(codes("shipping small beats shipping big")).toEqual([]);

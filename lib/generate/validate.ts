@@ -1,6 +1,6 @@
-import { MAX_TWEET, unknownBrackets, weightedLength, words } from "@/lib/text";
+import { unknownBrackets, words } from "@/lib/text";
 
-export type Issue = { code: "length" | "near_copy" | "placeholder" | "names"; message: string; items: string[] };
+export type Issue = { code: "near_copy" | "placeholder" | "names"; message: string; items: string[] };
 export type Validation = { errors: Issue[]; warnings: Issue[] };
 export type ValidationContext = { notes: string; corpus: string[] };
 
@@ -34,8 +34,6 @@ const NAME = /\b[A-Z][\p{L}'’]+(?:\s+[A-Z][\p{L}'’]+)+/gu;
 export function validate(text: string, { notes, corpus }: ValidationContext): Validation {
   const errors: Issue[] = [];
   const warnings: Issue[] = [];
-  const len = weightedLength(text);
-  if (len > MAX_TWEET) errors.push({ code: "length", message: `${len}/${MAX_TWEET} weighted characters; cut ${len - MAX_TWEET}.`, items: [] });
   const copied = nearCopy(text, corpus);
   if (copied) errors.push({ code: "near_copy", message: "Too close to one of their existing posts; write something new.", items: [copied] });
   const brackets = unknownBrackets(text);

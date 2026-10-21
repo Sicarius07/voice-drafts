@@ -26,7 +26,7 @@ function AbPair({ batch, author, readOnly, ctl }: Props) {
   const ready = batch.slots.every((s) => s.status === "done" || s.status === "error");
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
+      <div className="grid items-start gap-3 sm:gap-4 md:grid-cols-2">
         {batch.slots.map((s, i) => (
           <DraftCard
             key={s.idx}
@@ -83,7 +83,7 @@ export function BatchView(props: Props) {
       {batch.kind === "ab" ? (
         <AbPair {...props} />
       ) : (
-        <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
+        <div className="space-y-3 sm:space-y-4">
           {batch.slots.map((s) => (
             <DraftCard key={s.idx} slot={s} author={author} readOnly={readOnly} onPatch={ctl.patchDraft} onAllow={ctl.allow} />
           ))}

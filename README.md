@@ -51,7 +51,7 @@ Every interaction is a typed event in `feedback_events` and updates one of two l
 
 **Visible within 2–3 interactions:** the first style edit creates a *tentative* rule immediately (toast with **Undo**), the next batch applies it ("Why this draft?" lists it), and the A/B button unlocks.
 
-**Rule states:** tentative → active (a second supporting edit, or Confirm) → archived (Undo, archive, or you put the pattern back: once for tentative rules, twice for active ones). Every change writes a ruleset version; any version can be restored. Max 10 rules go into the prompt; hard rules (facts, length, never posting) always outrank learned ones.
+**Rule states:** tentative → active (a second supporting edit, or Confirm) → archived (Undo, archive, or you put the pattern back: once for tentative rules, twice for active ones). Every change writes a ruleset version; any version can be restored. Max 10 rules go into the prompt; hard rules (facts, never posting) always outrank learned ones.
 
 **How it's measured**
 
@@ -146,6 +146,9 @@ include fetched posts, so the Langfuse project sees those too.
   Now: one rewrite with the voice card and learned rules, no re-check.
 - **Engagement ranked a person's most-liked post near the bottom.** It used likes per impression, and the most-viewed post
   converts the lowest share. It now ranks raw counts within the person's own posts (count = reach × conversion).
+- **Drafts were capped at 280 characters,** so a person who mostly writes long posts (X Premium) got 2–3 line drafts.
+  There's no length cap now: the voice card gives their average post length as the target, and the angle sets the shape
+  only. Length shows as a plain character count.
 - **A Reposts or Likes batch repeated one angle** (those goals have one angle each). Other goals' angles now fill the rest.
 - **The first simulation taught nothing:** its hidden preferences already matched the voice. It now uses a persona whose
   habits the user wants to drop.
@@ -155,7 +158,7 @@ include fetched posts, so the Langfuse project sees those too.
 Two-phase fetch (reply/thread stats) · per-user quotas and a cost ledger · embeddings + pgvector + MMR for examples ·
 example-credit learning · stat-drift rules · usage-based rule decay and conflict detection · prompt-cache prewarm and the
 Flex tier · temporal-holdout replay and a "spot the fake" discriminator eval · judge re-scoring on version change · history
-screen and profile diffs · moderation · X archive import, threads and long posts, learning from real post engagement.
+screen and profile diffs · moderation · X archive import, threads, learning from real post engagement.
 
 ## Credits
 

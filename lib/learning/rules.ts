@@ -7,7 +7,7 @@ type KindDef = { text: (p: RuleParams) => string; check: ((text: string, p: Rule
 /** Every learnable rule kind. `check` returns true when a text satisfies the rule; null = no detector. */
 export const RULE_KINDS = {
   avoid_phrase: { text: (p) => `Don't use "${p.phrase}"`, check: (t, p) => !normalize(t).includes(normalize(p.phrase ?? "")) },
-  max_chars: { text: (p) => `Keep it under ${p.n} characters`, check: (t, p) => weightedLength(t) <= (p.n ?? 280) },
+  max_chars: { text: (p) => `Keep it under ${p.n} characters`, check: (t, p) => weightedLength(t) <= (p.n ?? Infinity) },
   no_question_ending: { text: () => "Don't end on a question", check: (t) => !features(t).questionEnd },
   no_hashtags: { text: () => "No hashtags", check: (t) => !features(t).hasHashtag },
   no_emoji: { text: () => "No emoji", check: (t) => !features(t).hasEmoji },
@@ -43,7 +43,7 @@ export const hasDetector = (kind: RuleKind) => def(kind).check !== null;
 
 function validParams({ kind, params }: Proposal): boolean {
   if (kind === "avoid_phrase") return !!params.phrase && params.phrase.trim().length >= 2 && params.phrase.length <= 60;
-  if (kind === "max_chars") return !!params.n && params.n >= 40 && params.n <= 280;
+  if (kind === "max_chars") return !!params.n && params.n >= 40;
   if (kind === "style_note") return !!params.note && params.note.length <= 140;
   return true;
 }

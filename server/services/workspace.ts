@@ -123,7 +123,7 @@ export type Workspace = Awaited<ReturnType<typeof loadWorkspace>>;
 export async function loadVoicesPage(userId: string) {
   const [mine, demos, showcase] = await Promise.all([
     db
-      .select({ id: t.voices.id, username: t.xAccounts.username, name: t.xAccounts.name, avatarUrl: t.xAccounts.avatarUrl, stats: t.voiceProfiles.stats, isDemo: t.xAccounts.isDemo })
+      .select({ id: t.voices.id, username: t.xAccounts.username, name: t.xAccounts.name, avatarUrl: t.xAccounts.avatarUrl, stats: t.voiceProfiles.stats })
       .from(t.voices)
       .innerJoin(t.xAccounts, eq(t.xAccounts.id, t.voices.xAccountId))
       .innerJoin(t.voiceProfiles, eq(t.voiceProfiles.id, t.voices.profileId))
@@ -133,7 +133,7 @@ export async function loadVoicesPage(userId: string) {
     db.query.voices.findFirst({ where: eq(t.voices.isShowcase, true) }),
   ]);
   return {
-    voices: mine.map(({ stats, ...v }) => ({ ...v, confidence: stats.confidence, posts: stats.n })),
+    voices: mine.map(({ stats, ...v }) => ({ ...v, posts: stats.n })),
     demos,
     showcaseId: showcase?.id ?? null,
   };

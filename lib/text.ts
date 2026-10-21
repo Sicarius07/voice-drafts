@@ -2,7 +2,6 @@ import twitter from "twitter-text";
 
 /** X's weighted length (emoji = 2, URL = 23, CJK = 2), via the official library. */
 export const weightedLength = (text: string) => twitter.parseTweet(text).weightedLength;
-export const MAX_TWEET = 280;
 
 export const extractUrls = (text: string) => twitter.extractUrls(text);
 export const extractMentions = (text: string) => twitter.extractMentions(text);

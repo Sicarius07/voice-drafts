@@ -4,7 +4,6 @@ import { Suspense } from "react";
 import { AddVoice } from "@/components/add-voice";
 import { AppHeader } from "@/components/app-header";
 import { HandleAvatar } from "@/components/handle-avatar";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Panel, Sheet } from "@/components/workspace/surfaces";
 import { requireUser } from "@/server/auth";
@@ -33,10 +32,6 @@ async function Voices() {
                       @{v.username} · {v.posts} posts
                     </p>
                   </div>
-                  {v.isDemo && <Badge variant="outline">demo</Badge>}
-                  <Badge variant="secondary" className="hidden sm:inline-flex">
-                    {v.confidence} confidence
-                  </Badge>
                   <ChevronRightIcon aria-hidden className="size-4 text-muted-foreground" />
                 </Link>
               </li>

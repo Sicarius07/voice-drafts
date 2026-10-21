@@ -14,7 +14,7 @@ export function voiceCard(stats: Stats, q: Qualities, signatures: string[]): str
     q.topics.length && `Topics: ${q.topics.map((t) => t.label).join("; ")}`,
     q.tone.length && `Tone: ${q.tone.join(", ")}`,
     q.positions.length && `Positions they keep returning to: ${q.positions.join(" | ")}`,
-    `Length: usually ${Math.round(stats.length.p10)}–${Math.round(stats.length.p90)} chars (median ${Math.round(stats.length.p50)}), ~${Math.round(stats.medianSentences)} sentence(s)`,
+    `Length: about ${Math.round(stats.length.mean)} characters (their average post), ~${Math.round(stats.medianSentences)} sentence(s)`,
     `Starts lowercase: ${pct(r.lowercaseStart)} · ends without punctuation: ${pct(r.noTerminalPunct)} · multi-line: ${pct(r.multiLine)}`,
     `Emoji: ${pct(r.hasEmoji)} of posts${stats.topEmoji.length ? ` (favorites ${stats.topEmoji.join(" ")})` : ""} · hashtags: ${pct(r.hasHashtag)} · em dash: ${pct(r.hasEmDash)} · exclamation: ${pct(r.exclamation)}`,
     `Questions at the end: ${pct(r.questionEnd)} · lists: ${pct(r.list)} · numbers: ${pct(r.digits)} · contractions: ${pct(r.contraction)}`,

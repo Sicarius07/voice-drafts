@@ -12,9 +12,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { THUMBS_DOWN_REASONS } from "@/lib/learning/signals";
-import { MAX_TWEET, weightedLength } from "@/lib/text";
+import { weightedLength } from "@/lib/text";
 import type { ClientDraft, LearnedReceipt } from "@/lib/types";
-import { cn } from "@/lib/utils";
 import { act } from "./act";
 import { TellsMeter, VoiceMatchMeter } from "./meters";
 import { TellText } from "./tell-text";
@@ -43,8 +42,7 @@ function showReceipt(r: LearnedReceipt, refresh: () => void) {
 }
 
 function CharCount({ text }: { text: string }) {
-  const n = weightedLength(text);
-  return <span className={cn("text-xs tabular-nums", n > MAX_TWEET ? "text-destructive" : "text-muted-foreground")}>{n}/{MAX_TWEET}</span>;
+  return <span className="text-xs text-muted-foreground tabular-nums">{weightedLength(text)} chars</span>;
 }
 
 function CardShell({ author, angle, label, children }: { author: Author; angle: string; label?: string; children: React.ReactNode }) {

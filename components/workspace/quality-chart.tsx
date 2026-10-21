@@ -34,7 +34,7 @@ export function QualityChart({ series }: { series: QualityPoint[] }) {
   return (
     <figure className="space-y-2">
       <ChartContainer config={config} className="aspect-auto h-56 w-full">
-        <LineChart data={data} margin={{ top: 8, right: 88, bottom: 0, left: 0 }} accessibilityLayer>
+        <LineChart data={data} margin={{ top: 20, right: 88, bottom: 0, left: 0 }} accessibilityLayer>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="batch" tickLine={false} axisLine={false} tickMargin={8} label={{ value: "batch", position: "insideBottomRight", offset: -2, className: "fill-muted-foreground text-[11px]" }} />
           <YAxis domain={[0, 100]} ticks={[0, 50, 100]} tickFormatter={(v) => `${v}%`} tickLine={false} axisLine={false} width={40} />

@@ -57,23 +57,10 @@ Every interaction is a typed event in `feedback_events` and updates one of two l
 
 - **Blind A/B (headline):** same angle, same example posts, same notes; the only difference is your learned rules. Random positions, arms revealed after you choose. Win rate with a Wilson 95% interval.
 - **Trends:** acceptance rate (copied, liked or picked) and words kept (share of each draft's words you keep), rolling over 3 batches. Labelled as confounded: users change too.
-- **Simulated run (read-only showcase):** a fictional founder whose old posts are full of hashtags, emoji, `!` and em dashes,
-  and a scripted user who has quietly decided to drop all four. Each round: 3 drafts; the user copies the clean ones,
-  fixes the rest by deleting exactly those things (content untouched), picks the best; a blind A/B every other round.
-  `pnpm simulate`, 8 rounds, ~$0.70:
-
-  | Round | Drafts meeting every hidden preference | Violations per draft | Blind A/B |
-  |---|---|---|---|
-  | 1 | 0/3 | 2.3 | |
-  | 2 | 3/3 | 0.0 | |
-  | 3–8 | 18/18 | 0.0 | learned arm picked 3/3 |
-
-  Round 1's three edits (7 deletions: 3 hashtags, 3 emoji, 1 em dash) produced "No hashtags" (3 supporting edits,
-  active), "No emoji" (2, active) and "No em dashes" (1, tentative), each verified by its detector against the edit.
-  The next batch applied them. In the A/B pairs the baseline arm kept the old habits ("…read it — 400 views in a week
-  😅 #buildinpublic") and the learned arm didn't. "No exclamation marks" was never learned because no draft used `!`.
-  This shows the mechanism works on simple, checkable preferences; it says nothing about fuzzier ones, which is what
-  real users' blind A/B is for.
+- **Showcase voice (@okara_eng, read-only):** a fictional inference engineer. Its 107 past posts were written by the
+  model in the style of real AI-infra posts; its 12 batches come from the real pipeline, and the edits, rule reviews and
+  A/B picks were made by hand. Words kept went 72% → 99% (rolling), dipping when a new preference showed up, and the
+  learned arm won 3 of 3 blind A/B tests.
 
 ## Measuring the judge
 
@@ -150,8 +137,8 @@ include fetched posts, so the Langfuse project sees those too.
   There's no length cap now: the voice card gives their average post length as the target, and the angle sets the shape
   only. Length shows as a plain character count.
 - **A Reposts or Likes batch repeated one angle** (those goals have one angle each). Other goals' angles now fill the rest.
-- **The first showcase run taught nothing:** its hidden preferences already matched the voice. It now uses a persona whose
-  habits the user wants to drop.
+- **The first showcase run taught nothing:** its preferences already matched the voice. The showcase now uses a persona
+  whose old posts have habits the user has dropped.
 - **Pasted posts with paragraphs were split into fragments** (blank lines separated posts). A `---` line now separates
   posts when there is one; otherwise blank lines still do.
 
@@ -192,7 +179,6 @@ cp .env.example .env.local          # fill in keys; DATABASE_URL can be a local 
 pnpm db:migrate
 pnpm dev                            # http://localhost:3333
 pnpm seed:demo                      # fetch demo handles once (X credits)
-pnpm showcase                       # build the read-only showcase voice (~$2 of OpenAI)
 pnpm test                           # unit tests (no network)
 pnpm eval:judge                     # judge eval (real API calls)
 ```

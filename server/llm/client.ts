@@ -8,7 +8,7 @@ import { generation, type LlmCall } from "./tracing";
 
 /** One model for everything; effort is the only per-stage dial. Every draft records both. */
 export const MODEL = "gpt-6.1-sol";
-export const EFFORT = { generate: "medium", judge: "medium", profile: "medium", humanize: "medium", rules: "low", showcase: "medium" } as const;
+export const EFFORT = { generate: "medium", judge: "medium", profile: "medium", humanize: "medium", rules: "low" } as const;
 export type Stage = keyof typeof EFFORT;
 
 // gpt-6.1-sol, USD per 1M tokens (standard tier, 30-minute cache writes at 1.25x input)

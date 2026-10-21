@@ -43,7 +43,7 @@ async function Voices() {
         <p className="px-3 pb-2 text-sm text-muted-foreground sm:px-6">
           Curious how learning plays out over many rounds?{" "}
           <Link className="underline underline-offset-4" href={`/voices/${showcaseId}`}>
-            See a voice after 14 rounds of feedback
+            See a voice after 12 rounds of feedback
           </Link>
           .
         </p>

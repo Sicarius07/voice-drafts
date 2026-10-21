@@ -12,7 +12,6 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "seed:demo": "tsx --env-file=.env.local --conditions=react-server scripts/seed-demo.ts",
-    "showcase": "tsx --env-file=.env.local --conditions=react-server scripts/showcase.ts",
     "eval:judge": "tsx --env-file=.env.local --conditions=react-server evals/judge/run.ts"
   },
   "dependencies": {

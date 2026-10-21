@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { SignIn } from "@/components/sign-in";
 import { Button } from "@/components/ui/button";
 import { Panel, Sheet, TAB_ICONS } from "@/components/workspace/surfaces";
-import { getUser } from "@/server/auth";
+import { getUser, OAUTH_PROVIDERS } from "@/server/auth";
 
 async function Cta() {
   const user = await getUser();
@@ -13,7 +13,7 @@ async function Cta() {
         <Link href="/voices">Open your voices</Link>
       </Button>
     );
-  return <SignIn github={!!process.env.GITHUB_CLIENT_ID} devLogin={process.env.NODE_ENV !== "production"} />;
+  return <SignIn providers={OAUTH_PROVIDERS} />;
 }
 
 // The loop in the order it happens, each named after the workspace tab where it lives.

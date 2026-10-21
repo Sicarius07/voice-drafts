@@ -1,0 +1,29 @@
+# reference material (cloned, not ours)
+reference/
+
+# secrets and local tooling
+.env*
+!.env.example
+.specstory/
+.cursorindexingignore
+
+# local data (raw X API responses: tweet text must not be committed)
+.data/
+evals/judge/results/
+
+# deps / build
+node_modules/
+.next/
+out/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+pnpm-debug.log*
+.vercel
+.gstack/

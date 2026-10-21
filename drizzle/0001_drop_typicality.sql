@@ -1,0 +1,1 @@
+ALTER TABLE "voice_profiles" DROP COLUMN "typicality";

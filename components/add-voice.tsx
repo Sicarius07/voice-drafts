@@ -89,7 +89,7 @@ export function AddVoice({ demos }: { demos: { username: string; name: string }[
           Or paste your posts instead
         </button>
       ) : (
-        <Panel title={`Paste at least ${MIN_PASTED} of your posts, separated by blank lines`} className="space-y-2">
+        <Panel title={`Paste at least ${MIN_PASTED} of your posts, separated by blank lines (or by --- lines if they have paragraphs)`} className="space-y-2">
           <Textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={8} placeholder={"first post\n\nsecond post\n\n…"} className="bg-background" />
           <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
             <span>

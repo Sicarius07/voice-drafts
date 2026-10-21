@@ -1,0 +1,1095 @@
+i used to read serving code from the entry point downward. 2 evenings later, i knew a lot about argument parsing.
+
+what works better for me: pick 1 question, like “when does a finished request release its kv blocks?”
+
+then follow that request through allocation, scheduling, completion, cleanup. write a tiny test that checks the answer.
+
+papers give me the vocabulary. a breakpoint tells me which meaning of “finished” we're actually using.
+---
+let me explain 👇
+
+"nsight says the kernel takes 38µs" is incomplete when the unprofiled benchmark says 24µs.
+
+we hit this tuning a fused activation kernel. i collected a giant nsight compute metric set, then started comparing its duration column with last week's cuda-event timings. very scientific. extremely employable behavior.
+
+what changed:
+
+a) counter collection needed multiple replay passes. this wasn't the same execution environment as the normal serving run.
+
+b) cache handling and clock controls differed from our benchmark setup. for a kernel reading the same weights repeatedly, that matters.
+
+c) the serving run had neighboring kernels; the isolated profile didn't reproduce that cache history either.
+
+we now use compute to test a specific hypothesis: spills? inefficient memory transactions? not enough active warps? then remeasure latency outside the profiler, with documented warmup and inputs.
+
+systems first to locate the expensive region, compute second to understand it, unprofiled timing to verify the change.
+
+lesson: the profiler is goated at answering questions. it does not choose the right question for you.
+---
+here's the thing: a closed-loop benchmark can politely hide your queueing problem. 🔥
+
+we compared 2 serving configs with 64 clients. each client waited for a response before sending its next request. config b showed 18% better throughput and a tidy 1.4s p95 ttft.
+
+then we replayed a fixed arrival trace averaging 22 requests/s, with 10s bursts at 38.
+
+a) in the closed-loop test, slower responses automatically reduced the rate of new arrivals.
+b) in the replay, arrivals kept coming while the server was busy.
+c) b's queue grew during each burst. p95 ttft hit 4.9s, and 7% of requests missed our 10s deadline.
+
+config a had lower peak throughput but missed 1% of deadlines on that same trace. its batching settings traded some peak efficiency for lower queueing delay.
+
+this does NOT make closed-loop testing fake. it's useful for finding saturation behavior. it just doesn't answer whether we can absorb a customer's traffic spikes.
+
+the takeaway: if the load generator backs off when your server struggles, say so next to the latency number.
+---
+we shaved 14% off decode latency and broke stop-sequence handling on 6/240 cases.
+
+serving evals are NOT just model evals with a stopwatch attached.
+---
+read 14 pages on speculative decoding. understood the rejection step after 35 lines of code and 1 failing test. papers remain undefeated at having margins 😅
+---
+my first year in inference, i reported an insane 28% throughput win 🚀
+
+then a teammate asked why the output lengths were different.
+
+baseline: 256 generated tokens. my run: 173, because i'd changed the stop config.
+
+reran with matched settings: 3%.
+
+that review taught me more than the optimization. a benchmark is NOT a screenshot of the biggest number your terminal produced.
+---
+spec decoding at concurrency 4: 1.7x faster per request.
+at concurrency 64: 12% fewer output tokens/sec per gpu.
+
+acceptance was fine. spare compute was NOT.
+---
+here's the thing: agents make a pretty convincing argument for benchmarking with an arrival trace instead of a request generator set to "180 rps" 🔥
+
+we replayed 600 agent sessions against the same serving config in 2 ways:
+
+a) spread their requests evenly over time
+b) preserve the timing of tool completions and follow-up model calls
+
+same prompts. same outputs. same average request rate.
+
+p99 queue wait was 140ms in (a), 870ms in (b).
+
+the difference was a mock search service that released batches of results every 400ms. agents waiting on those results all came back together. our average was hiding the part where everyone knocked at once.
+
+continuous batching helped absorb the bursts, but it didn't create prefill capacity. the queue still had to drain before the next wave arrived.
+
+we now keep the tool-wait gaps in our load tests and plot arrivals in 25ms buckets. also stopped calling the evenly spaced run our "production simulation," which was apparently a bold use of the word production.
+
+the absolutely wild optimization was making the benchmark less convenient.
+
+the takeaway: preserve the timing relationships. an agent workload is more than a bag of prompts.
+---
+here's the thing: our cost per million tokens dropped from $2.40 to $0.15 without us changing a single kernel 🔥
+
+we changed the denominator. please hold your applause.
+
+same daily slice:
+1) $192 in gpu spend
+2) 80m generated output tokens
+3) 1.2b input tokens, most of them repeated prefixes
+
+$192 / 80m = $2.40 per million output tokens.
+$192 / 1.28b = $0.15 per million total tokens.
+
+both calculations are valid. they answer different questions. putting the second number next to somebody else's output-only number is not an optimization.
+
+prefix caching makes this especially slippery. a cached input token counts toward the request's logical input length, but it doesn't incur the same prefill work as an uncached token. one customer sending the same 20k-token prefix all day can make the blended number look incredible.
+
+we now report input tokens split by cached/uncached, output tokens separately, and actual gpu spend over the same wall-clock interval. idle time stays in the bill. retries stay in the work counters. pricing revenue lives somewhere else entirely.
+
+the takeaway: write the denominator next to the dollar sign. ideally before the slide reaches someone with purchasing authority.
+---
+i don't trust an fp8 vs fp4 throughput chart without the operating point.
+
+on 1 b200, our 24b candidate did 1.29x aggregate output tok/s with fp4 at saturation. under a 70 ms p95 inter-token-latency limit, the sustainable request-rate gain was 1.12x.
+
+same prompt/output distribution, same scheduler settings, separate load sweeps.
+
+the 1.29x is real. so is the queue. selling the first number as the second is how you acquire an exciting on-call rotation.
+---
+91% prefix hit rate 🚀
+
+12% of input tokens actually reused.
+
+insane how much better a dashboard looks when every denominator is a request.
+---
+ok story time 🧵
+
+we tried reproducing a 9,400 output tok/s result on 2x h100 80gb and got 7,100. same model, same tensor parallelism, same 1,024-token inputs / 256-token outputs. i had already mentally written a mildly annoying post.
+
+instead we asked for the resolved config.
+
+1) their server allowed 256 active sequences. ours allowed 128.
+2) their harness kept 256 requests outstanding. ours sent a fixed 18 requests/s.
+3) their number excluded a 30s warmup. ours included model warmup in a 90s run.
+
+matching all 3 got us to 9,180. across 5 runs, ours ranged from 9,060 to 9,330. close enough to start investigating the remaining gap, not close enough to claim an exact reproduction.
+
+neither harness was inherently wrong. one measured saturated throughput; the other measured a specific arrival rate, and we had different measurement windows too.
+
+lesson: reproducing a number starts with reproducing the question. the gpu model is not the whole experiment.
+---
+here's the thing: a warm-cache eval can make a broken cache look cracked 🔥
+
+we were testing a prefix-cache change with 300 prompts. replay the same prompts twice, compare outputs, measure latency. clean results. 41% lower median ttft on the second pass.
+
+what we'd actually tested was whether a request could reuse its own prefix.
+
+production asks a less friendly question: can request b safely reuse blocks created while serving request a?
+
+so we built pairs:
+1) same long prefix, different final question
+2) identical text, different adapter
+3) one token changed just before a block boundary
+4) cancel the first request halfway through prefill, then send the second
+
+case 2 exposed a missing adapter identity in our cache lookup. the candidate reused blocks across adapters. the standalone adapter tests had passed because each ran with a fresh cache.
+
+we added 48 paired sequences, checking each against a cache-disabled run with the matching adapter. latency still gets measured, but only after those pass.
+
+moral of the story: the unit of a stateful serving eval is sometimes a sequence of requests, not a prompt.
+---
+i thought being useful meant knowing MORE quantization formats.
+
+then i spent 2 days adding 140 tool-call cases to our evals. caught an int4 candidate that saved 19% memory but broke 11 argument schemas the baseline got right.
+
+the kernel work was cracked. it still wasn't a deployable config.
+
+early-career advice, imo: become the person who can tell whether the clever thing worked.
+---
+here's the thing: “learn the whole inference stack” is a terrible item to put on a weekend todo list 👇
+
+i tried it in year 1. ended sunday with 17 tabs, half a scheduler paper, and no ability to explain why a request was slow.
+
+my better exercise was much smaller: serve one 8b model, then change exactly one part of the workload each evening.
+
+1) hold output length at 128 tokens. take prompt length from 512 to 8k. separate waiting time from prefill time.
+2) hold the prompt fixed. increase concurrency from 1 to 32. watch inter-token latency, not just aggregate tokens/sec.
+3) repeat the exact same 2k-token prefix, then alter its first token. inspect cache-hit metrics instead of assuming a faster second request proves prefix caching.
+4) predict each result before running it. read the relevant vLLM code only when the prediction fails.
+
+that last step was goated. suddenly i had a reason to understand block allocation instead of trying to absorb a repository by scrolling.
+
+kept every run in a 40-line notebook, including the embarrassing predictions.
+
+the takeaway: build one small model of how the system behaves, then find the experiment that breaks it. repeat.
+---
+we almost merged a triton softmax change on a 7% speedup: 14.0 → 13.0µs at 32 rows × 32,768 columns.
+
+then the correctness test included a row whose logits were all around -1,000. my "simplification" had removed max subtraction. denominator became 0.
+
+random inputs from n(0,1) had politely concealed this.
+
+added large offsets, long negative tails, and peaked distributions to the tests. SAME probabilities after a constant shift is a useful requirement, imo. 🚀
+---
+let me explain 👇 capacity planning from average tokens/sec is how we nearly sold the same gpu twice.
+
+our 4-replica pool averaged 7 requests/sec. a replay said each replica could handle 3 requests/sec inside our latency target. 12 > 7. excellent. time to go home.
+
+except:
+
+a) the busiest 5-minute window was 10.8 requests/sec, not 7.
+
+b) that window had a different request mix: median prompt length was 6k tokens instead of 1.5k. the 3 requests/sec result was NOT portable to it.
+
+c) taking 1 replica out for a rollout left 3. at the original request mix, that's already only 9 requests/sec.
+
+we replayed the peak window against 3 replicas. p95 time to first token went from 720ms to 3.6s. no kernel regression, no mysterious networking issue. just arithmetic we had politely declined to do.
+
+we provisioned 6 replicas for that pool: 5 available during a rollout, each tested at 2.4 requests/sec on the peak mix. then checked the longer bursts too, because a 5-minute average can hide another average wearing a smaller hat.
+
+lesson: capacity is traffic you can serve inside an slo while something is unavailable. the rest is a benchmark.
+---
+our bad deploy improved median inter-token latency from 29ms to 25ms and made p99 worse by 2.3x.
+
+we'd raised the prefill token budget. short requests looked cracked; decodes sharing a worker with a fresh 24k-token prompt did not.
+
+rollback took 6 minutes. explaining why the green median graph wasn't evidence of a good deploy took longer.
+
+we gate on decode stalls now, not just aggregate tokens/sec. 🔥
+---
+ok story time 🧵
+
+my first triton rmsnorm kernel was 1.8x faster than our unfused path at 4,096 rows. then i tried 1 row, which was an awkward time to remember we serve decode requests.
+
+same hidden size: 4,096. same h100. very different amount of work available.
+
+a) at 4,096 rows, there's enough parallelism to keep the gpu busy. avoiding intermediate reads/writes matters a lot.
+
+b) at 1 row, my one-program-per-row implementation gives the gpu exactly 1 program to run. the other sms are apparently there for emotional support.
+
+c) increasing num_warps from 4 to 16 didn't manufacture more independent rows. it just changed how one row got processed.
+
+we kept the fused kernel, but benchmarked rows {1, 8, 32, 128, 4096} and used a separate small-row path. the headline speedup became a much less insane 1.12x on our weighted trace.
+
+lesson: a tensor shape is part of the workload, not a footnote under the benchmark.
+---
+i want error bars on the 1.04x victory lap.
+
+we ran the same 70b serving config 7 times, 5 minutes each, on a shared host. output throughput ranged from 3,820 to 4,090 tok/s. the proposed scheduler change scored 4,030 on its first run.
+
+maybe it's faster. maybe the host briefly stopped doing its other hobbies.
+
+we're doing paired runs in shuffled order before calling a ~4% gain real.
+---
+let me explain why we stopped evaluating a quantized tool model on json validity alone.
+
+our int4 candidate looked fine on 2,400 saved turns: 99.4% schema-valid tool calls versus 99.6% for bf16. enough to make me start estimating the gpu savings, which is how you summon an eval problem.
+
+then we ran 300 complete agent tasks with the same tools and a 12-turn limit.
+
+1) the int4 model sometimes chose the wrong enum value. perfectly valid json, wrong operation.
+
+2) the tool returned a legitimate error.
+
+3) the agent tried again, usually with a longer context containing the failed call and its error.
+
+successful tasks needed a median of 8 model calls instead of 6. task completion fell from 91% to 85%. our serving requests got cheaper individually; the completed tasks did not.
+
+this was our candidate on our workload, not a claim that int4 universally breaks tools. we kept the quantization work and changed the gate: completed tasks, model calls per completion, and end-to-end p95 alongside schema validity.
+
+lesson: valid json is NOT a successful tool call. evaluate the loop before multiplying the per-token discount by next month's traffic.
+---
+we started recording time to valid tool call, not just time to first token 👇
+
+on one eval slice, p95 ttft was 170ms. p95 until the client had a complete, schema-valid call was 690ms.
+
+the agent can't execute half a json object, and our client waits for the full object before dispatch. the first token is not the handoff.
+
+now that 520ms gap has its own panel. slightly less flattering dashboard, considerably more useful.
+---
+let me explain 👇
+
+at a 24-person company, "improve incident response" cannot mean writing a 38-page document and hoping somebody reads it while ssh is hanging.
+
+our last bad deploy took 9 minutes to detect and 27 minutes to roll back. only 4 of those rollback minutes were actual deployment work.
+
+a) 8 minutes finding which release was live. the dashboard showed the image tag, but not the serving config revision.
+
+b) 10 minutes debating whether the previous image could read the new config.
+
+c) 5 minutes finding someone with production deploy permissions. yes, really.
+
+we picked 3 postmortem actions: show image + config revision together, test the previous release against new configs in ci, and give the on-call engineer a logged emergency rollback path.
+
+each got 1 owner and a date. we deferred the other 9 ideas instead of pretending they were commitments.
+
+i love a deep root-cause discussion. i love being able to undo our own work MORE.
+
+lesson: for a small team, 3 completed fixes beat 12 beautifully formatted intentions.
+---
+here's the thing: speculation can hurt throughput before you run out of compute.
+
+we enabled a colocated draft on an 80gb gpu serving a quantized target. draft weights, its kv cache, and the extra runtime buffers consumed roughly 6gb that we'd previously had available for target kv.
+
+on our long-context replay:
+- speculation off: 48 active sequences fit without preemption
+- speculation on: 40 fit under the same memory safety margin
+- accepted draft prefix: still a perfectly respectable 2.5 out of 4
+
+at concurrency 8, decode latency improved 29%. at offered load near the old capacity limit, output throughput dropped 14% and p95 queue time nearly doubled 🚀
+
+nothing mysterious happened to acceptance. we had traded away resident target requests to make each remaining request decode faster. recomputation from preempted requests made the result worse.
+
+we now benchmark with the draft's full memory footprint reserved from the start, including its cache at the tested concurrency.
+
+moral of the story: the draft is small. its capacity bill is not necessarily small.
+---
+let me explain 👇 kv memory math is mostly multiplication, which makes my first spreadsheet especially embarrassing.
+
+for our fictional full-attention config:
+- 32 layers
+- 8 kv heads per layer
+- head dim 128
+- bf16 cache: 2 bytes per element
+
+1) each token stores both k and v:
+2 × 32 × 8 × 128 × 2 = 131,072 bytes.
+
+that's 128 kib per token. use the kv head count, NOT the 32 query heads in this config. gqa matters here.
+
+2) an 8,192-token sequence therefore needs 1 gib of kv. that's its current cached length, including generated tokens, not just the input prompt.
+
+3) a 40 gib kv pool holds 327,680 token slots. in the tidy case of independent, equally sized sequences, that's 40 sequences at 8,192 tokens each.
+
+it isn't a promise of 40 requests forever. decoding grows them, block allocation rounds them, and shared prefixes can change physical occupancy. weights and workspaces also need memory outside that pool.
+
+lesson: calculate bytes per token before arguing about batch size. the arithmetic is cheap; finding out during load testing is our premium option.
+---
+“78% acceptance” sounds great until you ask whether that means accepted draft tokens or requests with ≥1 acceptance.
+
+we had both on one dashboard. very efficient confusion.
+---
+spent 3 hours chasing a 12% regression. benchmark client was pegged at 1 cpu core. reproduced my own bottleneck perfectly 😅
+---
+ok story time 🧵
+
+we got a new open-weight moe behind an endpoint 6 hours after release. the insane part was how little of that time involved making matrix multiplication faster.
+
+our launch notebook for the 96b / 12b-active checkpoint:
+
+a) 52 min downloading and checking shards. one interrupted transfer left a file with the right name and the wrong ambitions.
+
+b) 81 min getting the tokenizer, chat template and stop conditions consistent with the reference implementation. our first “fast” run was fast because it stopped after 9 tokens.
+
+c) 96 min checking bf16 outputs, tool-call parsing and 128 saved conversations. we compared greedy token ids on short fixtures, then task outcomes on longer ones. identical prose wasn't the requirement.
+
+d) the remaining time went into warmup, load tests and a staged rollout on 8 h100s. we started at 16 concurrent requests, not the 128 that made the throughput chart prettier.
+
+day-one support meant a narrow, tested configuration: 16k context, bf16, no speculative decoding. the fancy paths could wait until tomorrow.
+
+lesson: loading the weights is a milestone. it is not the release checklist.
+---
+our 0.6b draft beat our 3b draft on end-to-end latency by 17%.
+
+the smaller model is goated at the important task of finishing its turn 😅
+---
+i used to profile the entire server startup and then hunt through 40 seconds of cuda activity like that was a personality.
+
+now: warm up, replay 200 requests, put nvtx ranges around 20 steady-state decode steps, capture that window in nsight systems. 8 concurrent requests, fixed prompts, same output lengths.
+
+found a repeated 95µs gap between sampling and the next forward pass in 10 minutes. it had been buried under compilation and graph capture before.
+
+smaller trace, fewer invented explanations. 🔥
+---
+ok story time 🧵
+
+03:07, p99 time to first token goes from 1.2s to 14s. gpu utilization is 96%. first theory: we finally need more capacity. expensive theory.
+
+here's what actually happened:
+
+a) we'd changed routing to favor workers with a matching cached prefix. great on the replay: 24% fewer prefill tokens.
+
+b) one customer's 18k-token system prompt became most of the overnight traffic. the router kept picking the same 2 workers out of 8 because they had the warm prefix.
+
+c) our routing score counted the cache benefit but barely penalized queued work. those 2 workers had 70+ requests waiting while others had fewer than 5.
+
+we disabled the affinity bonus. cache hit rate fell from 81% to 46%. p99 ttft recovered to 1.4s without adding a single gpu.
+
+absolutely wild watching the cache dashboard get worse while the service got better 😅
+
+we now cap the queueing penalty's tradeoff against estimated prefill savings. a cache hit is worth milliseconds, not unlimited loyalty.
+
+lesson: optimize time until the request finishes, NOT how pleased the cache is with itself.
+---
+14,200 tok/s with p99 ttft at 8.6s is NOT a faster chat service. it is a very productive waiting room.
+---
+ok story time 🧵
+
+our agent endpoint had a 940ms p99 time to first token. the client timeout was 800ms. you can probably see where this is going.
+
+1) a burst of tool results arrived. queue time climbed, but actual decode speed barely moved.
+
+2) clients timed out and retried immediately. the original requests stayed alive because our gateway wasn't propagating disconnects to the serving worker.
+
+3) both attempts competed for the same gpu time. the retry often finished second. beautiful work from everyone involved, especially me.
+
+at the peak, 26% of active sequences belonged to callers who had already left. we were paying to disappoint people twice.
+
+we wired cancellation through the gateway and verified that the scheduler actually released the sequences. then added bounded retries with jitter and a shared deadline across attempts.
+
+same 90-second traffic replay, same 4 gpus: p99 ttft went from 2.3s under the retry storm to 1.1s. not a miracle kernel. just less abandoned work.
+
+lesson: a timeout is NOT cancellation. check what your gpu is still doing after the client gives up.
+---
+our gpu utilization dashboard said 94%. absolutely wild efficiency until we checked what it meant 😅
+
+it meant a kernel was running during 94% of the sample windows. not that we were delivering 94% of useful capacity.
+
+cutting max batch tokens from 24k to 12k took that number down to 81%. p99 time to first token went from 2.4s to 890ms, with output throughput down 3%.
+
+i will bravely accept the less green dashboard.
+---
+“12b active” is a compute detail, NOT a promise that the other 72b parameters will politely stop occupying memory.
+
+our 84b moe still wanted ~168 gb for bf16 weights. very committed to being an 84b model.
+---
+ok story time: the utilization chart was goated. the queue was on fire.
+
+we had 8 replicas showing 76% aggregate gpu memory usage. enough room, apparently. meanwhile p99 time to first token crossed 4 seconds and the scheduler was preempting requests.
+
+what the average hid:
+
+a) 2 replicas were near their kv-cache limit, repeatedly evicting work and making it run again.
+b) 6 had headroom.
+c) our session-affinity routing kept sending returning sessions to the hot pair.
+
+also, that 76% was device memory usage. weights and reserved allocator pools were included. it was NOT a measure of how many more requests the scheduler could admit.
+
+we added per-replica panels for active kv blocks, queued requests, preemptions and prompt-length buckets. then let the router break affinity when a replica crossed our queue threshold, accepting some lost prefix-cache hits.
+
+cache hit rate fell from 71% to 64%. p99 time to first token fell from 4.2s to 1.1s at the same offered load. no extra gpus.
+
+there wasn't one magic utilization number we needed to find. we needed to stop averaging away the overloaded replicas.
+
+moral of the story: a fleet average is perfectly capable of describing a machine that does not exist.
+---
+3 years out of uni and my most useful contribution to a day-one model launch was adding a startup check.
+
+we had 8 ranks, 2 different revisions of the model config, and no reason for anyone to notice until the first request hung.
+
+now each rank reports the checkpoint revision, config hash and tokenizer hash before readiness goes green. cost: about 40 lines and 300 ms at startup.
+
+i wanted to write triton that afternoon. apparently my assigned specialization was preventing distributed interpretive dance.
+---
+25-person startup career ladder:
+
+09:00: fix tokenizer config
+11:00: explain the gpu bill
+14:00: interview someone to help with the tokenizer config
+---
+we had p99 ttft at 620ms on the dashboard and 2.4s in customer traces.
+
+our timer started when the scheduler admitted the request. theirs started when they sent it. amazing how fast a queue becomes when you exclude waiting in it.
+
+we now split ingress wait, scheduler wait, prefill, and first-token delivery. the headline number starts at ingress.
+
+measure the WAIT, not just the work.
+---
+code completion got 84% draft-token acceptance in our replay. support chat got 53%. same target, same draft, same 4-token proposal budget.
+
+we'd tuned the draft on repository text and then reported one blended number. insane confidence for a metric mostly determined by the traffic mix 🔥
+
+now we split by route AND sampling config. the weighted average can come back after it learns some manners.
+---
+one customer sent 96 requests every 10s instead of ~10/s. same average load, entirely different on-call experience.
+---
+ok story time 🧵
+
+our int4 candidate passed the usual benchmarks: general QA down 0.3 points, coding down 0.5, throughput up 29% at batch 32. insane little spreadsheet. we canaried it.
+
+then a customer reported that invoice extraction was dropping minus signs.
+
+not inventing amounts. not invalid json. returning 184.20 where the document said -184.20. extremely tidy way to be wrong.
+
+a) our benchmark mostly checked whether answers were semantically correct. the extraction slice had 36 examples, only 2 with negative amounts.
+
+b) the customer's documents had long tables, repeated totals and credit notes. our short, clean fixtures barely resembled them.
+
+c) on 420 approved, de-identified examples, bf16 got signed amounts right on 98.8%. the int4 candidate got 94.0%. both returned valid json on every case.
+
+we rolled back, added exact field checks, and made signed amounts a separate release gate. we also reran bf16 through the same serving path so we weren't blaming quantization for a parser bug.
+
+the failure was in THIS artifact on this workload. it wasn't evidence that every int4 model forgets accounting.
+
+lesson: valid json is a transport property, not a finance qualification.
+---
+a golden set sampled uniformly from traffic gave us 97.8% pass rate. looked fine.
+
+then we split it by task:
+- chat: 99.2%
+- extraction: 98.6%
+- tool calls: 86.4%
+
+tool calls were only 4% of requests, so the aggregate politely buried them.
+
+imo, sample by traffic for cost estimates. for release gates, give every critical workflow enough cases to actually fail you.
+---
+the rollback button worked. that was the problem.
+
+we'd deployed a scheduler change behind a config flag, saw queue age climb, and reverted the container image within 4 minutes. queue age kept climbing.
+
+for the next 12 minutes we investigated a regression in code that was no longer running.
+
+what survived the rollback? the config. our older build accepted unknown fields, ignored the new scheduler flag, and still picked up a shared token-budget increase from the same release. we'd reverted half a change and called it recovery.
+
+that larger budget was enough to keep long prefills interfering with decode. restoring the previous config brought p99 inter-token latency from 180ms back to 44ms.
+
+we changed the deploy unit to an image digest plus an immutable config revision. rollback restores both. startup logs print both. the incident view shows both.
+
+we also rehearse rollback under load now. once a month, 20 minutes, deliberately boring traffic plus a few long prompts.
+
+moral of the story: "the old binary is running" is a fact. "the old system is restored" is a claim you still have to verify.
+---
+5,400 output tok/s looked cracked until we checked the latency column.
+
+same open-weight moe, same 8 gpus, same 2k-in/256-out workload:
+
+batch cap 128: 5,400 tok/s, 143 ms p99 inter-token latency
+batch cap 64: 4,200 tok/s, 57 ms p99
+
+our customer target was 80 ms. we shipped the second config.
+
+imo a throughput number without its latency constraint is mostly a proposal for somebody else's product.
+---
+the most important label on a vendor chart is sometimes “output length.” 😅
+
+in our toy run, engine a did 6,800 output tok/s vs b's 5,100. insane gap until we noticed a generated 512 tokens/request and b stopped naturally at a median of 93.
+
+reran both with exactly 256 output tokens: 5,900 vs 5,600.
+
+a still won. just not by an entire marketing department.
+---
+here's the thing: keeping the router in bf16 was a goated fix for exactly one problem, not a quantization strategy 🔥
+
+we were testing an fp8 path for a new open-weight moe. on 600 internal task cases, bf16 passed 531 and our first fp8 configuration passed 509.
+
+a) leaving router logits and top-k selection in bf16 brought us to 521. small score changes near the selection boundary had been changing which experts ran.
+
+b) that still left 10 failures relative to baseline. we replayed fixed token sequences and compared layer outputs, rather than trying to diagnose everything from final answers.
+
+c) a few expert projections had activation outliers that our calibration set barely exercised. changing their scaling policy recovered 7 cases. leaving those projections in bf16 recovered the remaining 3, at a modest memory cost.
+
+we ended up at 531/600 with 18% less weight memory than the baseline, not the memory reduction we'd originally hoped for. matching that score also didn't prove the configurations were interchangeable; we checked which cases changed.
+
+the takeaway: “fp8 passed” should identify the recipe, calibration data and workload. the dtype alone tells you surprisingly little.
+---
+a 12 req/s tenant broke our scheduler harder than a 35 req/s tenant.
+
+why: the first sent 18k-token prompts in synchronized bursts. the second sent mostly 400-token prompts, spread out.
+
+our admission limit counted requests. the gpu was processing tokens. minor philosophical disagreement.
+
+adding a queued-input-token budget stopped us admitting 40 enormous prefills just because 40 looked like a small number.
+---
+we nearly picked the bigger draft because its acceptance chart looked cracked 😅
+
+same target, same 4-token proposal budget, matched tokenizers, 500 held-out prompts. these were low-concurrency decode measurements, not a capacity test.
+
+1) 1b draft: 13ms drafting + 28ms verification. mean accepted prefix: 1.9 tokens. including the correction/bonus token, that's 2.9 output tokens per 41ms round, or about 71 tok/s.
+
+2) 3b draft: 35ms drafting + 30ms verification. mean accepted prefix: 3.2 tokens. that's 4.2 output tokens per 65ms round, or about 65 tok/s.
+
+the larger draft predicted the target better. it just took too long doing it. better acceptance bought back most of the extra draft cost, not all of it.
+
+we kept the 1b for that route. on another route with much slower target verification, the ranking flipped.
+
+the takeaway: choose the draft against the target's actual verification cost. “best draft model” without hardware, traffic, and concurrency is mostly a naming exercise.
+---
+“just increase max_num_seqs” is an insane amount of confidence in a config field 🔥
+
+on our 8b deployment, going from 64 to 128 active sequences bought 17% more output tok/s. p99 inter-token latency went from 41ms to 76ms.
+
+continuous batching kept the gpu busier. it did not make each user's turn arrive sooner.
+
+we kept 64 for chat. the offline queue can have the other tradeoff.
+---
+our golden set had 800 prompts and 0 requests with an empty user message.
+
+production contributed that test case at 02:17. very generous 😅
+---
+with 16-token kv blocks, a 17-token sequence occupies 32 token slots. 15 slots of tail waste.
+
+tiny requests have overhead too. theirs just rounds up politely.
+---
+03:11 page: 8 healthy gpus, 0 successful requests.
+
+our health check verified that the server could answer a question nobody was asking.
+---
+$0.19 per million tokens looked absolutely wild until we rebuilt the denominator.
+
+our fictional capacity plan was 8 gpus at $2.40/gpu-hour, serving 28,000 output tok/s when saturated. that's about $0.19 per million output tokens for gpu rental alone.
+
+but that isn't the same as our monthly serving cost:
+
+1) at 45% average utilization, the same rental bill works out to about $0.42/m output tokens, assuming throughput scales with useful busy time.
+2) reserving 1 of those 8 gpus for failover leaves 7 earning their keep. under the same utilization assumption, we're near $0.48/m.
+3) cpu hosts, storage and network still exist. inconvenient, i know.
+
+i'm fine with a vendor showing peak gpu-only economics. it's a useful ceiling on efficiency for that workload. i want the chart to say whether “tokens” means input, output, or both, and whether the dollar figure assumes every gpu is busy all month.
+
+moral of the story: a capacity benchmark is an ingredient in a cost model, not the invoice.
+---
+we got decode from 920 to 1,080 tok/s and cost per million output tokens barely moved: $2.31 → $2.27.
+
+turns out the other 19 hours of the day also appear on the invoice.
+---
+continuous batching took us from 940 to 1,380 output tok/s. the gpu did not get faster. we stopped making it wait for the longest request to finish 😅
+---
+nsight compute reported spills in our fused dequant + reduction kernel. my response was naturally to increase the tile size.
+
+128 → 256 elements per program, 4 warps unchanged: 11.6µs → 16.2µs. more live values, more local-memory traffic, worse time.
+
+the cracked optimization was making the tile SMALLER. back to 128, then shortening the lifetime of the scale values: 9.8µs.
+
+fusion saves traffic until register pressure starts sending you invoices.
+---
+our fp4 build lost 0.2 points on the aggregate eval and 7.4 points on invoice-total extraction.
+
+insane how much quality you can preserve by not looking at the relevant column.
+---
+let me explain the most expensive “just add another node” we've tried 👇
+
+we moved an 8-way expert-parallel deployment from 1 node with 8 h100s to 2 nodes with 4 h100s each. same checkpoint, same precision, same total gpu count. the second layout was what capacity had available.
+
+at 64 concurrent requests, median decode-step time went from 29 ms to 46 ms.
+
+1) routing produces a different destination mix every layer. now some of those token activations had to cross the 400 gb/s-rated network links rather than stay on the node's nvlink fabric.
+
+2) the transfers were small enough that headline bandwidth was a terrible predictor. packing, launch latency and synchronization mattered a lot.
+
+3) one busy destination delayed the layer. more local compute efficiency didn't remove that dependency.
+
+we profiled dispatch and combine separately from the expert matmuls. their combined share of step time rose from 17% to 39%.
+
+MORE gpus wasn't even the issue here. we had the same 8, arranged into a more educational shape.
+
+lesson: an expert-parallel benchmark needs a topology diagram, not just a gpu count.
+---
+we deployed an int4 variant after the task eval moved by only 0.2 points. then production schema-valid json fell from 99.6% to 96.8%.
+
+the aggregate eval was goated at hiding the problem: 80% of it was plain-text answers. the regression clustered around tool calls with long argument lists.
+
+we rolled back the quantized weights, not the server. same 6 replicas, same traffic, schema validity recovered.
+
+imo "quality passed" needs a slice name attached. especially when the slice pays the invoices.
+---
+a calibration set can look representative while missing the thing that breaks your quantization.
+
+ours had 2,000 prompts. plenty of chat, code and summaries. almost no long numeric tables.
+
+with our offline-calibrated fp4 recipe, invoice line-item accuracy was 89.4%, versus 96.1% in fp8. conversational preference barely moved. absolutely wild split until we inspected what the calibration pass actually saw.
+
+a) ordinary prose dominated the sampled activation statistics.
+b) table-heavy examples produced a different tail in several mlp inputs.
+c) the fitted clipping choices bought lower error on common values by sacrificing that tail.
+
+we replaced 300 calibration prompts with tables, identifiers and unit conversions. no eval examples, no copies of their templates. same bit widths, same kernels.
+
+invoice accuracy reached 94.8%. not baseline, but enough to stop blaming every loss on 4 bits as a concept.
+
+then we checked the other slices to make sure we'd moved the problem rather than hidden it. code exact match shifted by -0.1 points.
+
+the takeaway: calibration data is part of the artifact. version it like weights, not like a disposable benchmark script.
+---
+we deleted 73 cases from the golden set this week. that was maintenance, not an attempt to improve the pass rate 🚀
+
+our set had grown to 1,460 cases through the highly scientific process of adding whatever scared us last tuesday.
+
+some expected answers were wrong. some depended on a chat template we'd retired 8 months ago. 21 were duplicates of the same parser failure with different names in the prompt.
+
+the dangerous part: we'd started treating any score change as a model change. sometimes the ruler was bent.
+
+new process:
+
+a) every case has a source, an owner and a reason it blocks a release. "someone added it" is not a reason.
+
+b) inputs, expected results, grader code and chat template are versioned together. a score without that version is just a number someone remembers.
+
+c) removals get reviewed separately from the candidate rollout. we run the current production model and the candidate on both set versions. no quietly deleting the 3 cases your optimization broke.
+
+d) unresolved labels go into quarantine. they stay visible, but don't randomly approve or veto deployments.
+
+we ended up with 1,387 cases and a more useful failure report. still not a certificate of safety; customer traffic keeps finding new ways to be specific.
+
+the takeaway: a golden set needs maintenance and change control, not just more prompts.
+---
+temperature 0 is NOT a promise of identical text after a serving change.
+
+we replayed 500 prompts before and after changing batch scheduling. 19 outputs differed; 18 still passed their task checks. 1 changed a tool argument from an integer to a string.
+
+an exact-text gate would have flagged all 19. a vibes-based judge might have waved through the broken call.
+
+we keep exact matches for protocol fixtures, schema + value checks for tools, and task rubrics for prose. different contracts need different assertions.
+---
+most goated contribution this week: 12 extraction fixtures from support, each with a checked expected answer.
+
+they caught the quantized candidate's date-format regression in 38 seconds. my 6-page rollout doc caught nothing.
+---
+let me explain 👇 continuous batching isn't “batch size 32, but goated.”
+
+our old loop effectively did this:
+a) collect 32 requests
+b) run until every sequence finishes
+c) collect the next 32
+
+with 31 short answers and 1 long answer, the tail of that batch was mostly empty seats. new requests waited outside while the gpu decoded for the last sequence.
+
+the continuous version makes a scheduling decision each iteration. finished sequences leave; queued requests can enter as capacity permits. on a replay of 2,400 requests, that moved us from 790 to 1,160 output tok/s on the same gpu.
+
+but admission isn't free. new requests need prefill, existing requests need decode, and both want time on the device. admitting every waiting prompt immediately gave us ugly gaps in ongoing streams.
+
+we capped prefill work per iteration and gave up 4% of peak throughput to keep p99 inter-token latency under 55ms.
+
+lesson: filling empty seats helps. making every passenger board during every bite of dinner does not.
+---
+expert parallelism update: the average expert received 192 tokens. the busiest received 611.
+
+we had been tuning against the average, which was considerate of us because the average never paged anyone.
+
+logging max tokens per expert per layer explained our 74 ms decode spikes much better than aggregate gpu utilization. one rank was finishing work while 7 others practiced distributed patience.
+---
+our triton kernel passed 10,000 random tests and failed the first non-contiguous input.
+
+apparently stride=1 was doing more engineering than i was.
+---
+we reserved 2 spare gpus for failover. then put a nightly eval on them because they were idle.
+
+at 02:14 we discovered we'd reserved 0 spare gpus.
+---
+a fair fp8 vs bf16 chart needs an eval gate, not just identical prompts.
+
+our candidate went from 4,300 to 5,200 output tok/s. nice. it also dropped schema-valid responses from 99.4% to 97.8% on 2,000 held-out extraction cases.
+
+that's 32 extra failures in this set. MORE throughput isn't automatically more useful work.
+
+we kept the speed result and failed the release gate. both numbers belong in the report.
+---
+here's the thing: a p99 latency number without the load generator behavior is half a result.
+
+we benchmarked a replica with 32 workers. each worker sent a request, waited for completion, then sent another. p99 ttft was 390ms.
+
+then we replayed arrivals independently of completions, at the same 14 req/s average. p99 ttft was 1.8s.
+
+1) the closed-loop test slowed its own arrivals when the server slowed down.
+2) the replay kept sending during slow periods.
+3) the queue grew, which is what our production clients were already experiencing.
+
+neither test was fabricated. they answered different questions. only one matched the traffic we were claiming to support.
+
+now every report includes arrival process, offered req/s, completed req/s, failures, and the latency window. we also keep the input/output length distribution fixed when comparing scheduler changes.
+
+p50 is useful. p99 is useful. a workload that politely stops arriving whenever you're struggling is NOT a capacity plan.
+---
+added 0–300ms of retry jitter. the perfectly synchronized 1-second spikes disappeared from our request graph 😅
+
+first time i've shipped randomness as a reliability feature rather than as an accident.
+---
+ok story time 🧵
+
+we got a 1.9x decode speedup with speculation, then spent half the review explaining why “67% acceptance” wasn't enough to reproduce it.
+
+our setup: one active request, 4 draft tokens per round, same target and sampling settings throughout.
+
+a) ordinary target decoding took 31ms per output token.
+
+b) drafting 4 candidates took 18ms total. not 18ms each. this distinction briefly caused a spreadsheet incident.
+
+c) target verification plus sampling took 43ms per round.
+
+d) we accepted 2.7 draft tokens per round on average. with the correction token on rejection, or the bonus token when all 4 passed, we emitted 3.7 tokens per round.
+
+so: 61ms / 3.7 = about 16.5ms per output token. WAY better than 31ms.
+
+but acceptance alone leaves out both sides of that division: how long the round took, and how many tokens it actually emitted.
+
+lesson: log accepted-prefix length, emitted tokens per round, and round time together. a percentage cannot pay the gpu bill.
+---
+3 years out of uni, my most useful skill is following 1 request through 6 queues without deciding the gpu is haunted.
+---
+ok story time 🧵
+
+we had an fp4 candidate that was cracked on the memory dashboard and mediocre on the eval dashboard. 24b dense model, 48 blocks, fp8 w8a8 baseline versus block-scaled fp4 weights + activations for supported linears.
+
+rather than put half the model back in fp8, we built a precision ladder:
+
+1) keep embeddings, norms and output head at their existing bf16 settings in BOTH builds. don't quietly change 3 things and credit 1.
+2) restore one linear at a time to fp8. run a fixed 600-example screening set.
+3) rank quality recovered per added mb, then test combinations. individual wins don't necessarily add up.
+4) validate the chosen combination on a separate 2,400-example set.
+
+6 down projections plus 2 attention output projections got held-out exact match from 84.1% to 86.5%. baseline was 86.8%. packed weights grew from 13.1 gb to 13.9 gb.
+
+we also remeasured serving speed: extra dtype boundaries ate some of the win. still worth it, just not free.
+
+lesson: choose the precision map with evals, then benchmark the map you actually intend to ship.
+---
+one 65,536-token request takes the same kv space as 16 requests at 4,096 tokens, on our full-attention model.
+
+the customer calls it one request. the gpu has a different accounting system.
+---
+we tried int4 on the draft: proposal time fell from 11ms to 7ms, but mean accepted prefix fell from 2.6 to 1.8 tokens with a 4-token budget.
+
+end-to-end decode got 6% slower.
+
+MORE quantization was not automatically more speed. the draft quality eval wasn't there to protect the draft's prose. it was there to protect how much useful work each target verification bought us.
+---
+spent 3 hours tuning a triton kernel from 8.1µs to 6.9µs.
+
+nsight systems found a 740µs host-side gap immediately before it. elite prioritization 😅
+---
+ok story time 🧵
+
+6 months into inference work, i spent most of a day trying to make a decode kernel faster because our p95 time to first token had gone from 420ms to 1.4s.
+
+very normal place to begin if you have already decided what the problem is.
+
+we finally split the request timeline into:
+a) gateway + tokenization
+b) waiting for admission
+c) prefill
+d) first token back to the client
+
+(b) was 930ms at p95. the kernel i was staring at hadn't even run yet.
+
+we'd raised the concurrency limit from 32 to 64 after a throughput test. aggregate tokens/sec looked better, but our real mix included long prompts that kept arriving while decode requests were active. the waiting room got WAY bigger.
+
+lowering the limit to 40 brought p95 ttft to 510ms, with about 4% less throughput on the replay. not a universal setting. just a better point for that workload and its latency target.
+
+lesson: learn to draw the request timeline before learning to optimize your favorite rectangle on it.
+---
+we now require 0 failures on 64 stop/cancel cases before comparing tokens/sec.
+
+hard to celebrate a 9% speedup when the server won't stop talking.
+---
+the most useful kernel optimization we shipped last month was a dispatch rule.
+
+we had written a triton fused residual-add + rmsnorm kernel for an internal serving path. hidden size 5,120, bf16 inputs, fp32 reduction. the first benchmark looked excellent: 18.4 → 11.2µs at 256 rows.
+
+but continuous batching doesn't promise you 256 rows. in our replay, 61% of decode steps had 16 or fewer active sequences.
+
+at 8 rows, the existing specialized path took 5.6µs. ours took 7.3µs. we'd optimized the part of the shape table that looked nicest in a screenshot.
+
+so we did three boring things:
+1) measured every batch size we actually saw, not just powers of 2.
+2) checked both paths with the same residual-output requirements. no free omission of a write.
+3) dispatched to the old path below 64 rows, where our measurements showed the crossover.
+
+fixed replay, same latency limit: 3.4% more output tokens/s. forcing the new kernel everywhere gave us 0.8% less.
+
+the takeaway: writing a faster kernel and knowing when to call it are separate tasks. tbh the second one gets fewer victory screenshots.
+---
+4-bit weights, bf16 kv, 16 gib of cache. changing the weight dtype did NOT magically turn that into 64 gib of cache.
+
+we have now learned this in 2 separate planning meetings.
+---
+prefix-aware routing bought us a 74% reusable-token hit rate instead of 43% in a 4-replica replay.
+
+then we checked latency: p95 ttft went from 480 ms to 760 ms. the warm replica was also the busy replica.
+
+adding a queue-depth escape hatch brought it to 510 ms at 66% reuse.
+
+i'll take fewer cache hits if the request actually starts. maximizing locality without a queue budget is just choosing a very familiar place to wait.
+---
+a 72-token tool call can sit behind a 19k-token prefill and miss its entire latency budget.
+
+the model's tokens/sec still looks insane. the agent is still waiting for permission to read a file.
+---
+valid json is a very generous definition of working.
+
+our fp8 → fp4 trial kept json parse rate at 99.8%. on 1,600 tool-call cases, exact argument accuracy fell from 96.3% to 92.9%.
+
+mostly valid objects containing the wrong enum, a missing optional-but-requested field, or a rounded account balance. extremely employable bugs.
+
+we now score a) parse b) schema c) field values separately. the parser was doing its job. our eval wasn't. 🔥
+---
+we paged on gpu utilization below 40% for 5 minutes. at 03:26 it woke me because traffic had stopped, which is a normal feature of some nights.
+
+the insane part: we'd already had 11 minutes of real queueing earlier that evening without crossing that threshold. the gpus were busy, so apparently everything was fine. 😅
+
+we moved the page to sustained request queue age with a minimum traffic floor. utilization still gets a dashboard. it no longer gets my phone number.
+---
+at a 25-person company, “ask whoever owns it” can mean asking the person currently on a train with 8% battery.
+
+we started putting 3 things in every serving runbook: the metric that should move, the rollback command, and one way to verify recovery from outside the process.
+
+last month someone who'd never touched that deployment rolled it back in 6 minutes.
+
+small-company autonomy gets much nicer when it doesn't require telepathy.
+---
+ok story time 🧵 we nearly shipped a goated 90% prefix-hit chart that described almost none of the expensive work.
+
+our test window had 100 requests:
+a) 90 had 128 input tokens, all reusable
+b) 10 had 8,192 input tokens, none reusable
+
+request hit rate: 90 / 100 = 90%.
+
+input tokens reused: 11,520 / 93,440 = 12.3%.
+
+both numbers were correct. only one answered the question we were asking about avoided prefill.
+
+we now log three separate things:
+1) requests with any cached prefix
+2) cached input tokens / total input tokens
+3) ttft, split by input-length bucket
+
+that third one matters because token reuse isn't a direct latency prediction. skipping 1,000 tokens on an idle worker and skipping them behind a queue are different experiences. lookup and scheduling still exist, annoyingly.
+
+we also keep cold-start and warmed-cache runs separate. replaying one prompt 500 times is a useful best-case test, not a traffic forecast.
+
+the takeaway: put the denominator in the metric name. apparently this is cheaper than having me explain the chart incorrectly for 20 minutes.
+---
+we capped each agent at 4 in-flight model calls instead of 16. peak tokens/sec fell 6%; p99 turn latency fell from 3.4s to 1.9s.
+
+MORE concurrency was mostly buying everyone a longer queue.
+---
+we moved a per-request timestamp from the start of a 2,400-token prompt to the end, after the reusable instructions.
+
+same information, same model, same request trace. token-weighted prefix reuse went from 3% to 58% in our replay. 🔥
+
+prefix caching matches token sequences from the beginning. it does not recognize that your timestamp is spiritually irrelevant.
+
+imo prompt layout belongs in serving reviews, not just prompt reviews.
+---
+here's the thing: “fp4 failed long context” was technically true and operationally useless. 👇
+
+our candidate dropped from 93.2% to 86.7% on 240 document-retrieval cases at 32k context. we'd changed linear precision AND enabled fp8 kv cache to fit more concurrent requests.
+
+excellent experimental design if your goal is a 2-hour argument.
+
+we reran the full 2×2 with identical prompts and concurrency:
+
+• fp8 linears / bf16 kv: 93.2%
+• fp4 linears / bf16 kv: 92.4%
+• fp8 linears / fp8 kv: 88.1%
+• fp4 linears / fp8 kv: 86.7%
+
+those numbers are for our model, cache-scaling implementation and test slice. not a universal verdict on fp8 kv.
+
+most of the regression followed the cache change. there was also an interaction: subtracting the isolated losses didn't fully predict the combined result.
+
+we kept bf16 kv for that workload and accepted lower concurrency while investigating cache scales. rescuing 4 weight matrices had recovered only 0.3 points in the combined build.
+
+moral of the story: label the axes. “quantized” is NOT a sufficiently specific experiment configuration.
+---
+ok story time 🧵
+
+one customer's nightly job turned our perfectly respectable scheduler into a very expensive waiting room.
+
+normal traffic: 6–9 req/s, mostly 700-token prompts. their job: 160 requests in under 2s, each with roughly 12k input tokens and a 40-token answer.
+
+our scheduler admitted work in arrival order. that burst put about 1.9m input tokens ahead of interactive traffic. gpu utilization looked incredible. chat p99 ttft went from 310ms to 6.2s. absolutely wild dashboard, terrible product.
+
+we tried raising the active-sequence limit first. more admitted requests, same prefill bottleneck, extra kv pressure. a very educational 11 minutes.
+
+what helped:
+a) separate tenant queues with token-weighted admission
+b) chunked prefill, so a long prompt didn't monopolize one scheduling turn
+c) reserved scheduling share for interactive traffic
+
+on the same replay, chat p99 ttft fell to 480ms. the nightly job finished 14% later. we told the customer that tradeoff instead of calling it a free optimization.
+
+moral of the story: average req/s concealed the only 2 seconds that mattered.
+---
+our int4 moe passed the 200-question smoke test and failed 17 of 60 tool-routing cases.
+
+i have once again learned that “it still writes a nice paragraph” is not an eval suite.
+---
+the layer i'd rescue first isn't automatically the first or last one.
+
+on our 24b test model, restoring 6 mlp down projections to fp8 recovered 71% of the exact-match loss from fp4. restoring the first + last transformer blocks recovered 24%, at a slightly larger weight budget.
+
+we ranked candidates by actual restoration runs, NOT just activation outliers. big outliers are a clue; whether the remaining network absorbs the error is the question.
+---
+the first 40 tokens looked fine. token 170 was where our fp4 candidate started making expensive decisions.
+
+we saw nearly identical teacher-forced loss on a support workflow set: 0.842 in fp8, 0.849 in fp4. easy to look at that and call it done.
+
+but teacher forcing keeps feeding the reference continuation. production feeds the model its own previous choices.
+
+so we added 800 closed-loop simulator cases:
+
+1) generate a tool call.
+2) execute it against a fixed fake account database.
+3) feed back the result.
+4) continue until resolution or a 6-call limit.
+
+fp8 resolved 91.6%; fp4 resolved 87.8%. the common failure wasn't unreadable text. it was choosing a plausible wrong lookup, then confidently building on the returned record.
+
+keeping the final 4 attention output projections in fp8 raised resolution to 90.7% in a follow-up run. we're checking that precision map on a fresh case set before declaring victory.
+
+i still want token-level metrics: they're cheap and useful for diagnosis. i just don't want them signing off a multi-step agent alone.
+
+lesson: if the product consumes its own outputs, at least one release eval should too.
+---
+our postmortem had 6 action items and 0 owners.
+
+very efficient way to schedule the same incident for next quarter.
+---
+$0.84 per million output tokens, measured at batch size 128 with every request already queued 🚀
+
+$3.70 on yesterday's actual arrival trace, same hardware and model.
+
+the batch size is doing a lot of unpaid sales work here.
+---
+we added a 2nd attempt to an agent client and watched 140 logical requests/s become 211 attempts/s during a slowdown.
+
+apparently our capacity plan included the assumption that requests would only happen once.
+---
+the launch-day graph that changed our scheduler settings wasn't tokens/sec. it was “decode requests waiting behind prefill” 😅
+
+our new moe looked healthy with 1k-token prompts. then we replayed a mix containing 10% 24k-token prompts, keeping the same arrival rate of 3 requests/sec.
+
+p99 inter-token latency went from 63 ms to 218 ms. average output throughput barely moved. a very reassuring dashboard, provided you weren't reading the answers.
+
+what we changed:
+
+1) enabled chunked prefill with a 2,048-token scheduling budget instead of admitting each long prompt as one large chunk.
+
+2) capped the number of concurrent long prefills at 2. this reduced the bursts of routed tokens competing with decode work.
+
+3) kept enough kv-cache headroom to avoid turning a temporary traffic spike into preemption and recomputation.
+
+on the same replay, p99 inter-token latency fell to 76 ms. p95 time to first token for long prompts increased from 2.8 s to 3.6 s. that was an explicit trade, NOT a free speedup.
+
+we shipped it because streaming latency was the tighter product constraint, and kept both metrics on the rollout dashboard.
+
+moral of the story: continuous batching still requires deciding who gets to wait.
+---
+here's the thing: our new gather kernel won the microbenchmark and lost the serving benchmark. by enough that i briefly suspected arithmetic.
+
+isolated on an h100, the old path took 21µs and the triton version took 13µs for the same paged kv gather. absolutely wild, ship it, etc.
+
+then we replayed a fixed arrival trace against our vllm branch:
+- output throughput: 6,420 → 6,180 tokens/s
+- p95 inter-token latency: 29 → 33ms
+
+nsight systems showed why:
+
+1) the new kernel expected contiguous page indices.
+2) our isolated test constructed those indices before timing.
+3) the serving integration called contiguous() inside every decode step. for the actual strided input, that meant an allocation and a copy before the gather.
+
+we changed the kernel to read the original strides. the gather itself became 15µs, which looked worse in my little table. throughput recovered to 6,510 tokens/s on the same replay.
+
+moral of the story: your kernel's input preparation is NOT somebody else's latency.
+---
+reproduced the claimed 2.1x speedup. needed their 96% prefix-cache hit rate instead of our 11%. prefix caching is goated; workload teleportation remains experimental.
+---
+the 32k requests weren't crashing anything. they were just quietly becoming the entire cache 😅
+
+in one load test we gave a replica a 24 gib kv pool. at 128 kib/token, that's 196,608 token slots.
+
+four unrelated requests at 32,768 cached tokens each occupied 16 gib. the remaining 8 gib fit sixteen 4,096-token sequences. exactly. no room left for another decode step once everything reached those lengths.
+
+our admission limit was 32 active requests. we only had 20. the request-count dashboard looked relaxed while the cache was absolutely wild.
+
+we changed admission to account for occupied token blocks plus a bounded allowance for near-term decode growth. long prompts still ran, but waited when admitting them would squeeze the active decode set.
+
+on the same arrival trace, short-request p95 ttft fell from 2.1 s to 690 ms. long-request queueing increased. aggregate output tok/s moved less than 3%.
+
+this was NOT free throughput. it was a deliberate choice about who waits, with memory accounting instead of vibes.
+
+lesson: 20 active requests is not a capacity measurement until you know their lengths.
+---
+a draft doesn't have to be a tiny sibling of the target. it does have to speak the right token language.
+
+we rejected a promising 1b checkpoint before benchmarking: different tokenizer, no token-for-token proposal path in our implementation.
+
+“just map the vocab” became 3 pages of edge cases around whitespace and byte tokens. imo, a slightly worse matched-tokenizer draft is a better starting point than an accidental tokenizer research project.
+---
+buying an 8-gpu box looked cracked at $1.10/gpu-hour.
+
+small detail: that spreadsheet assumed 100% occupancy for 3 years. our paid traffic currently occupies 31%.
+
+i too am cheap when continuously employed.
+---
+buy vs rent finally became a useful conversation when we stopped comparing sticker prices.
+
+our quote for an 8-gpu server was $240k. over 36 months, that's about $9.13/hour for the box before power, rack space, networking, repairs or financing.
+
+renting equivalent capacity at our quoted $2.20/gpu-hour was $17.60/hour. hardware-only break-even: roughly 52% occupancy. our estimated ownership overhead pushed it closer to 68%.
+
+we rented. this workload has 6 months of customer commitment, NOT 36.
+
+imo the interesting number isn't peak utilization. it's how much demand you're willing to underwrite.
+---
+prefix caching is goated until the agent harness puts request-specific metadata before the shared tool definitions.
+
+we moved a timestamp + trace id out of the first 80 tokens and into a message after the stable 6.2k-token prefix. on our replay, cached input tokens went from 8% to 71%.
+
+no cache tuning. no new hardware. just stopped making every shared prefix unique, which tbh feels like something i should have checked before lunch.
+---
+fp4 took our 24b checkpoint's packed weights from 24.6 gb to 13.1 gb vs fp8. total device memory went from 61 gb to 49 gb at the same load.
+
+apparently the kv cache did not receive the compression memo 😅
+---
+p50 ttft: 84ms. p99: 2.7s.
+
+reporting only the first number is technically a benchmark and spiritually a cover-up. please plot BOTH.

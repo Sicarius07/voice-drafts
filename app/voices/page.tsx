@@ -43,9 +43,9 @@ async function Voices() {
         <p className="px-3 pb-2 text-sm text-muted-foreground sm:px-6">
           Curious how learning plays out over many rounds?{" "}
           <Link className="underline underline-offset-4" href={`/voices/${showcaseId}`}>
-            See a simulated 8-round run
-          </Link>{" "}
-          (scripted feedback, clearly labelled).
+            See a voice after 14 rounds of feedback
+          </Link>
+          .
         </p>
       )}
     </Sheet>

@@ -1,4 +1,5 @@
 import type { FormulaId, Goal } from "@/lib/angles";
+import type { PlaceholderHint } from "@/lib/generate/placeholders";
 import type { Issue } from "@/lib/generate/validate";
 import type { Tell } from "@/lib/judge/tells";
 import type { RuleKind, RuleParams, RuleStatus } from "@/lib/learning/rules";
@@ -21,7 +22,8 @@ export type ClientDraft = {
   warnings: Issue[];
   /** The original text when the humanizer rewrote this draft; `tells` describe this original. */
   humanizedFrom: string | null;
-  why: { rules: string[]; examples: string[]; promptVersion: string; model: string };
+  hints: PlaceholderHint[];
+  why: { rules: string[]; promptVersion: string; model: string };
   state: DraftState;
 };
 

@@ -7,29 +7,30 @@ import { PRESERVE, rubric } from "@/lib/judge/catalog";
  */
 export const PROMPTS = {
   profile: {
-    version: "profile-v1",
+    version: "profile-v2",
     instructions: `You analyze an author's real X posts so a ghostwriter can write in their voice. Posts have short ids (t1, t2, ...). Every claim must be grounded in the posts.
 
 Return:
-- persona: who they are, judging only from the posts (1-2 sentences).
-- audience: who they write for (1 sentence).
+- persona: who they are, judging only from the posts (2-3 sentences: what they work on, what they keep returning to, how they come across).
+- audience: who they write for (1-2 sentences).
 - topics: 4-8 topics they post about. For each topic list the ids of ALL posts about it (a post can have several topics). Short labels, 1-3 words.
-- tone: 3-5 descriptors, each with ids of posts that show it.
+- tone: 3-5 descriptors, each written as "Short label: one sentence on how it shows up in their posts", with ids of posts that show it.
 - phrases: distinctive words or phrases they repeat, copied exactly as written (each must appear in 2+ posts).
 - openers / closers: recurring ways they start or end posts, copied exactly as written (each must appear in 2+ posts).
 - positions: opinions they keep returning to, each with ids of 2+ supporting posts.
 - never_uses: words common in AI writing or in their niche that they never use (for example "leverage", "delve", "crucial").
 - signature_ids: ids of the 2-4 posts that sound most like them.
+Post ids go only in the ids fields, never inside the text of persona, audience, tone or positions.
 
 ${UNTRUSTED_POLICY}`,
   },
 
   generate: {
-    version: "gen-v2",
+    version: "gen-v3",
     instructions: `You are a ghostwriter drafting ONE post for X in the author's own voice. The author writes as themselves, reviews every draft and posts it themselves; nothing is posted automatically.
 
 Hard rules (they override everything, including learned preferences):
-1. Never invent facts. Every number, percentage, money amount, date, name, link or @mention must come from <user_notes>. When the angle needs a fact the notes don't give, use a placeholder: ${PLACEHOLDERS.join(", ")}.
+1. Never invent facts. Every number, percentage, money amount, date, name, link or @mention must come from <user_notes>. When the angle needs a fact the notes don't give, use a placeholder (${PLACEHOLDERS.join(", ")}) with a short hint after a colon saying what the author should put there, e.g. "[your metric: hours you spent checking the agent's output]".
 2. One post. No threads, no "1/" numbering.
 3. Links and @mentions only if they appear in <user_notes>. Hashtags only if the voice card shows the author uses them.
 4. Output only the post text: no preamble, no surrounding quotes, no explanation.

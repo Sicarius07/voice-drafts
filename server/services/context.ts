@@ -52,7 +52,6 @@ export async function loadProfileCtx(profile: ProfileRow) {
   return {
     profile,
     corpus,
-    byId,
     signatures,
     card: voiceCard(profile.stats, profile.qualities, signatures),
     /** Reference distribution for voice match: computed on load (cheap), so it never goes stale. */

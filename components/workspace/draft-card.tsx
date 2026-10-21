@@ -4,7 +4,7 @@ import { CopyIcon, InfoIcon, Loader2Icon, StarIcon, ThumbsDownIcon, ThumbsUpIcon
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-import { changeRule, saveEdit, sendFeedback } from "@/app/actions";
+import { changeRule, fillPlaceholder, saveEdit, sendFeedback } from "@/app/actions";
 import { HandleAvatar } from "@/components/handle-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { THUMBS_DOWN_REASONS } from "@/lib/learning/signals";
-import { weightedLength } from "@/lib/text";
+import { PLACEHOLDER_RE, weightedLength } from "@/lib/text";
 import type { ClientDraft, LearnedReceipt } from "@/lib/types";
 import { act } from "./act";
 import { TellsMeter, VoiceMatchMeter } from "./meters";
@@ -47,15 +47,14 @@ function CharCount({ text }: { text: string }) {
 
 function CardShell({ author, angle, label, children }: { author: Author; angle: string; label?: string; children: React.ReactNode }) {
   return (
-    <article className="min-w-0 space-y-3 rounded-[1.25rem] bg-platter p-4 sm:p-5">
+    <article className="flex min-w-0 flex-col gap-3 rounded-[1.25rem] bg-platter p-4 sm:p-5">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <HandleAvatar name={author.name} src={author.avatarUrl} />
         <div className="min-w-32 flex-1 leading-tight">
           <p className="truncate font-medium">{author.name}</p>
           <p className="text-sm text-muted-foreground">@{author.username}</p>
         </div>
-        {label && <Badge>{label}</Badge>}
-        <Badge variant="outline">{angle}</Badge>
+        {label ? <Badge>{label}</Badge> : <Badge variant="outline">{angle}</Badge>}
       </header>
       {children}
     </article>
@@ -106,9 +105,16 @@ export function DraftCard({ slot, author, readOnly, label, onPatch, onAllow }: C
     router.refresh();
   }
 
+  async function fill(slot: number, value: string) {
+    const r = await act(fillPlaceholder(d!.id, slot, value));
+    if (r.ok) onPatch(d!.id, { kept: r.data.text, hints: r.data.hints });
+  }
+
   async function copy() {
     await navigator.clipboard.writeText(current);
-    toast.success("Copied. Paste it into X yourself; nothing is posted for you.");
+    const left = current.match(PLACEHOLDER_RE)?.length ?? 0;
+    if (left) toast.warning(`Copied, but ${left} placeholder${left === 1 ? " is" : "s are"} still to fill.`);
+    else toast.success("Copied. Paste it into X yourself; nothing is posted for you.");
     await feedback("copy", { state: { ...d!.state, copied: true } });
   }
 
@@ -130,75 +136,78 @@ export function DraftCard({ slot, author, readOnly, label, onPatch, onAllow }: C
             </div>
           </div>
         </div>
-      ) : d.kept ? (
-        <div className="space-y-1">
-          <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">{d.kept}</p>
-          <p className="text-xs text-muted-foreground">Edited by you · meters apply to the original draft</p>
-        </div>
       ) : (
-        <TellText
-          text={showBefore && d.humanizedFrom ? d.humanizedFrom : d.text}
-          tells={d.humanizedFrom && !showBefore ? [] : d.tells} // a rewrite's tells were found in the original
-          onAllow={readOnly ? undefined : onAllow}
-        />
+        <div className="space-y-1">
+          <TellText
+            text={d.kept ?? (showBefore && d.humanizedFrom ? d.humanizedFrom : d.text)}
+            tells={d.kept || (d.humanizedFrom && !showBefore) ? [] : d.tells} // a rewrite's tells were found in the original
+            hints={d.hints}
+            onAllow={readOnly ? undefined : onAllow}
+            onFill={readOnly || (showBefore && !d.kept) ? undefined : fill}
+          />
+          {d.kept && <p className="text-xs text-muted-foreground">Edited by you · meters apply to the original draft</p>}
+        </div>
       )}
 
-      {d.warnings.map((w) => (
-        <p key={w.code} className="text-xs text-warning">
-          {w.message} {w.items.join(", ")}
-        </p>
-      ))}
+      {/* Meters and actions sit at the bottom, so side-by-side cards line up. */}
+      <div className="mt-auto space-y-3">
+        {d.warnings.map((w) => (
+          <p key={w.code} className="text-xs text-warning">
+            {w.message} {w.items.join(", ")}
+          </p>
+        ))}
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <VoiceMatchMeter vm={d.voiceMatch} />
-        <TellsMeter tells={d.tells} rewritten={!!d.humanizedFrom} />
-        <CharCount text={current} />
-        {d.humanizedFrom && !d.kept && (
-          <button type="button" className="text-xs text-muted-foreground underline underline-offset-4" onClick={() => setShowBefore((s) => !s)}>
-            {showBefore ? "Show rewrite" : "Show original"}
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <VoiceMatchMeter vm={d.voiceMatch} />
+          <TellsMeter tells={d.tells} rewritten={!!d.humanizedFrom} />
+          <CharCount text={current} />
+          {d.humanizedFrom && !d.kept && (
+            <button type="button" className="text-xs text-muted-foreground underline underline-offset-4" onClick={() => setShowBefore((s) => !s)}>
+              {showBefore ? "Show rewrite" : "Show original"}
+            </button>
+          )}
+        </div>
+
+        <footer className="flex flex-wrap items-center gap-1 border-t pt-2">
+          {!readOnly && (
+            <>
+              <Button size="icon-sm" variant={d.state.thumbs === "up" ? "outline" : "ghost"} aria-label="Good draft" onClick={() => feedback("thumbs_up", { state: { ...d.state, thumbs: "up" } })}>
+                <ThumbsUpIcon />
+              </Button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button size="icon-sm" variant={d.state.thumbs === "down" ? "outline" : "ghost"} aria-label="Bad draft">
+                    <ThumbsDownIcon />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-60 space-y-2">
+                  <p className="text-sm font-medium">What&apos;s wrong with it?</p>
+                  <div className="flex flex-wrap gap-1">
+                    {THUMBS_DOWN_REASONS.map((reason) => (
+                      <Button key={reason} size="xs" variant="outline" onClick={() => feedback("thumbs_down", { state: { ...d.state, thumbs: "down" } }, { reasons: [reason] })}>
+                        {reason}
+                      </Button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <Button size="sm" variant="ghost" onClick={() => setEditing(current)}>
+                Edit
+              </Button>
+              <Button size="sm" variant="ghost" onClick={copy}>
+                <CopyIcon /> Copy
+              </Button>
+              <Button size="sm" variant={d.state.picked ? "outline" : "ghost"} onClick={() => feedback("pick", { state: { ...d.state, picked: true } })} disabled={d.state.picked}>
+                <StarIcon /> {d.state.picked ? "Best" : "Pick best"}
+              </Button>
+              <Button size="icon-sm" variant="ghost" aria-label="Delete draft" onClick={() => feedback("delete", null)}>
+                <Trash2Icon />
+              </Button>
+            </>
+          )}
+          <WhyThisDraft draft={d} />
+        </footer>
       </div>
-
-      <footer className="flex flex-wrap items-center gap-1 border-t pt-2">
-        {!readOnly && (
-          <>
-            <Button size="icon-sm" variant={d.state.thumbs === "up" ? "outline" : "ghost"} aria-label="Good draft" onClick={() => feedback("thumbs_up", { state: { ...d.state, thumbs: "up" } })}>
-              <ThumbsUpIcon />
-            </Button>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button size="icon-sm" variant={d.state.thumbs === "down" ? "outline" : "ghost"} aria-label="Bad draft">
-                  <ThumbsDownIcon />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-60 space-y-2">
-                <p className="text-sm font-medium">What&apos;s wrong with it?</p>
-                <div className="flex flex-wrap gap-1">
-                  {THUMBS_DOWN_REASONS.map((reason) => (
-                    <Button key={reason} size="xs" variant="outline" onClick={() => feedback("thumbs_down", { state: { ...d.state, thumbs: "down" } }, { reasons: [reason] })}>
-                      {reason}
-                    </Button>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-            <Button size="sm" variant="ghost" onClick={() => setEditing(current)}>
-              Edit
-            </Button>
-            <Button size="sm" variant="ghost" onClick={copy}>
-              <CopyIcon /> Copy
-            </Button>
-            <Button size="sm" variant={d.state.picked ? "outline" : "ghost"} onClick={() => feedback("pick", { state: { ...d.state, picked: true } })} disabled={d.state.picked}>
-              <StarIcon /> {d.state.picked ? "Best" : "Pick best"}
-            </Button>
-            <Button size="icon-sm" variant="ghost" aria-label="Delete draft" onClick={() => feedback("delete", null)}>
-              <Trash2Icon />
-            </Button>
-          </>
-        )}
-        <WhyThisDraft draft={d} />
-      </footer>
     </CardShell>
   );
 }
@@ -226,16 +235,6 @@ function WhyThisDraft({ draft }: { draft: ClientDraft }) {
           ) : (
             <p className="text-muted-foreground">{draft.arm === "baseline" ? "None (this was the no-learning baseline)." : "None yet."}</p>
           )}
-        </div>
-        <div>
-          <p className="font-medium">Example posts it was shown</p>
-          <ul className="max-h-40 list-disc space-y-1 overflow-auto pl-4 text-muted-foreground">
-            {draft.why.examples.map((e, i) => (
-              <li key={i} className="line-clamp-2">
-                {e}
-              </li>
-            ))}
-          </ul>
         </div>
         <p className="text-xs text-muted-foreground">
           {draft.why.model} · prompt {draft.why.promptVersion}

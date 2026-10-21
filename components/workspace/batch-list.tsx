@@ -26,7 +26,7 @@ function AbPair({ batch, author, readOnly, ctl }: Props) {
   const ready = batch.slots.every((s) => s.status === "done" || s.status === "error");
   return (
     <div className="space-y-3">
-      <div className="grid items-start gap-3 sm:gap-4 md:grid-cols-2">
+      <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
         {batch.slots.map((s, i) => (
           <DraftCard
             key={s.idx}
@@ -68,7 +68,7 @@ export function BatchView(props: Props) {
   return (
     <section className="space-y-3">
       <header className="flex flex-wrap items-center gap-2 px-1 text-xs text-muted-foreground">
-        <span>{batch.kind === "ab" ? "Blind comparison" : `${batch.slots.length} draft${batch.slots.length === 1 ? "" : "s"}`}</span>
+        <span>{batch.kind === "ab" ? `Blind comparison · ${batch.slots[0]?.angle}` : `${batch.slots.length} draft${batch.slots.length === 1 ? "" : "s"}`}</span>
         <span>· goal {batch.goal}</span>
         {batch.topic && <span>· {batch.topic}</span>}
         <span>

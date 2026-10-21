@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { boolean, index, integer, jsonb, pgTable, primaryKey, real, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import type { FormulaId, Goal } from "@/lib/angles";
 import type { Engagement, Metrics } from "@/lib/generate/examples";
+import type { PlaceholderHint } from "@/lib/generate/placeholders";
 import type { Issue } from "@/lib/generate/validate";
 import type { Tell } from "@/lib/judge/tells";
 import type { RuleKind, RuleParams, RuleStatus, Snapshot } from "@/lib/learning/rules";
@@ -210,6 +211,7 @@ export const drafts = pgTable(
     voiceMatch: jsonb("voice_match").$type<VoiceMatch>().notNull(),
     /** Set when the humanizer rewrote the draft: the original text, which `tells` describe. */
     humanize: jsonb("humanize").$type<{ before: string } | null>(),
+    placeholderHints: jsonb("placeholder_hints").$type<PlaceholderHint[]>().notNull().default([]),
     usage: jsonb("usage").$type<{ input: number; cached: number; output: number; reasoning: number; costUsd: number }>().notNull(),
     prompt: text("prompt").notNull(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),

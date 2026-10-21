@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { FormulaId } from "@/lib/angles";
+import { withFilled } from "@/lib/generate/placeholders";
 import type { Posterior } from "@/lib/learning/bandit";
 import { editBurden, hunks as diffHunks, type Hunk } from "@/lib/learning/diff";
 import { db, t } from "@/server/db";
@@ -171,6 +172,15 @@ export const toClientRule = (r: typeof t.rules.$inferSelect): ClientRule => ({
 });
 
 /** Saves the user's edit, then learns from it: contradictions first, then mined + verified rules. */
+/** Fills one placeholder from the card. Not an edit: nothing is logged, rewarded or learned. */
+export async function fillPlaceholder(userId: string, draftId: string, index: number, value: string) {
+  const d = await ownedDraft(userId, draftId);
+  const filled = withFilled(d.textKept ?? d.textShown, d.placeholderHints, index, value);
+  if (!filled) throw new UserError("That placeholder isn't in the draft anymore.");
+  await db.update(t.drafts).set({ textKept: filled.text, placeholderHints: filled.hints }).where(eq(t.drafts.id, draftId));
+  return filled;
+}
+
 export async function saveEdit(userId: string, draftId: string, kept: string): Promise<LearnedReceipt> {
   const d = await ownedDraft(userId, draftId);
   const shown = d.textShown;
@@ -179,9 +189,9 @@ export async function saveEdit(userId: string, draftId: string, kept: string): P
   if (!kept || kept === (d.textKept ?? shown)) return receipt;
   const hunks = diffHunks(shown, kept);
   await db.update(t.drafts).set({ textKept: kept }).where(eq(t.drafts.id, draftId));
+  if (!hunks.length) return receipt; // only placeholder fills (or whitespace): not an edit
   await logEvent(userId, d.voiceId, "edit", { draftId, batchId: d.batchId, payload: { burden: editBurden(shown, kept), hunks } });
   await rewardAngle(d.voiceId, d.formula, "edit");
-  if (!hunks.length) return receipt;
 
   const existing = await db.select().from(t.rules).where(eq(t.rules.voiceId, d.voiceId));
   const write = async (rule: Rule, evidence?: { draftId: string; removed: string; added: string }) => {

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { addRule, changeRule, editRule, restoreRuleset } from "@/app/actions";
@@ -224,11 +223,6 @@ export function LearningTab({ data }: { data: Workspace }) {
             </ol>
           )}
         </Panel>
-        {data.voice.isShowcase && (
-          <p className="px-1 text-xs text-muted-foreground">
-            This is a simulated run: a scripted user with hidden preferences gave the feedback. <Link href="/voices" className="underline">Back to your voices</Link>
-          </p>
-        )}
       </aside>
     </Sheet>
   );

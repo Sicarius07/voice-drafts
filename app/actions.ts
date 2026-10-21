@@ -29,7 +29,10 @@ export const sendFeedback = async (draftId: string, type: FeedbackType, payload:
 
 export const regenerateBatch = async (batchId: string) => run((u) => learning.recordRegenerate(u, batchId));
 
-export const saveEdit = async (draftId: string, kept: string) => run((u) => learning.saveEdit(u, draftId, z.string().max(2000).parse(kept)));
+export const saveEdit = async (draftId: string, kept: string) => run((u) => learning.saveEdit(u, draftId, z.string().max(25_000).parse(kept)));
+
+export const fillPlaceholder = async (draftId: string, index: number, value: string) =>
+  run((u) => learning.fillPlaceholder(u, draftId, z.number().int().min(0).parse(index), z.string().trim().min(1).max(500).parse(value)));
 
 export const chooseAb = async (batchId: string, choice: AbChoice) =>
   run((u) => learning.recordAbChoice(u, batchId, z.enum(["a", "b", "tie", "neither"]).parse(choice)));

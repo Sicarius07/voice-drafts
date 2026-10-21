@@ -124,13 +124,13 @@ describe("metrics", () => {
     const t = abTally(["learned", "learned", "baseline", "tie"]);
     expect(t).toMatchObject({ learned: 2, baseline: 1, tie: 1, decided: 3 });
   });
-  it("rolls acceptance and edit burden over batches", () => {
+  it("rolls acceptance and words kept over batches", () => {
     const s = qualitySeries([
       { shown: 3, accepted: 0, burdens: [0.6] },
       { shown: 3, accepted: 3, burdens: [] },
     ]);
     expect(s[1].acceptance).toBe(0.5);
-    expect(s[1].burden).toBe(0.6);
+    expect(s[1].kept).toBeCloseTo(0.4);
   });
 });
 

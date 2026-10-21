@@ -29,7 +29,7 @@ verifies every claim the LLM makes.
 | Two meters | **Voice match** = how typical the draft is of you, as a percentile against your own posts ("72" = more typical than 72% of them), from style features only. **AI tells** = Clean / Minor / Needs work, never a "% AI" score. | AI detectors are unreliable on tweet-length text. The tells meter names specific phrases readers react to, highlights them inline and explains them. |
 | AI-tell judge | LLM judge using the x-skills tell catalog as rubric; it must quote the exact span; **code verifies each span exists** (rejecting hallucinated ones) and sets severity from the catalog. A small deterministic layer covers the countable checks (hashtags, emoji, em dashes, model leakage like `[Your Name]`). | Calibrated per person: countable patterns are capped at 0 if the person never uses them, otherwise at their own 90th percentile; the judge sees their top posts and marks patterns they use themselves as "you do this too" (not counted); "This is fine for me" allowlists a category for that voice. |
 | Humanize | Only when a draft has a blocker or ≥ 2 warnings: **one full rewrite** that gets the voice card, the learned rules and the flagged spans with their explanations. Used as is, no re-check; the card shows "Rewritten", and "Show original" highlights what was flagged. | Simple and predictable: one extra call, only for drafts that need it. Clean drafts are never touched. Patching spans was tried first (see "Changed while building"). |
-| Never invent facts | A hard rule in the generation prompt: numbers, names, links and @mentions come from your notes, otherwise placeholders like `[your number]`. Code still blocks brackets that aren't allowed placeholders, and warns on multi-word names that aren't in your notes or past posts. | A code fact guard was built and dropped (see "Changed while building"). You review every draft before posting. |
+| Never invent facts | A hard rule in the generation prompt: numbers, names, links and @mentions come from your notes, otherwise placeholders like `[your number]`. The model adds a short hint to each one (`[your metric: hours spent checking the agent's output]`); code moves the hint out of the text, so the checks only see `[your metric]`, and the card shows it as a chip you click to read the hint and fill it in place. Code still blocks brackets that aren't allowed placeholders, and warns on multi-word names that aren't in your notes or past posts. | A code fact guard was built and dropped (see "Changed while building"). You review every draft before posting. The hint rides along in the same streamed call, so it costs nothing extra. |
 | Angles | Hook formulas ported from x-skills (contrarian one-liner, data-point, build-in-public, mini-list, relatable cold-open, third-person case study), filtered by goal, picked by a **Beta-per-angle Thompson-sampling bandit** per voice. When a goal has fewer angles than drafts (Likes has one), other goals' angles fill the rest. | ~30 lines; learns which shapes you keep. |
 | Model | `gpt-6.1-sol` for every call (effort `medium` for generation, judge, humanize and profile; `low` for rule mining). Model, effort and prompt version are stored on every draft. | One model keeps the system simple and cheap (~$0.01 per draft including the judge). Current OpenAI reasoning models don't take `temperature`, so reproducibility comes from pinned versions plus measured run-to-run agreement. |
 | Auth | Better Auth (GitHub), Drizzle adapter. | Auth.js is in security-only maintenance; Better Auth is actively maintained. |
@@ -41,7 +41,7 @@ Every interaction is a typed event in `feedback_events` and updates one of two l
 
 | Signal | What it updates |
 |---|---|
-| **Edit + save** (richest) | Word diff → the LLM labels hunks style/content/typo and proposes ≤ 2 rules from style hunks → **code keeps a rule only if its detector is violated by the shown draft and satisfied by your edit** (e.g. "Keep it under 100 characters", "Don't use 'just'"). Free-form style notes are allowed but only become active when you confirm them. Placeholder fills are ignored. |
+| **Edit + save** (richest) | Word diff → the LLM labels hunks style/content/typo and proposes ≤ 2 rules from style hunks → **code keeps a rule only if its detector is violated by the shown draft and satisfied by your edit** (e.g. "Keep it under 100 characters", "Don't use 'just'"). Free-form style notes are allowed but only become active when you confirm them. Filling a placeholder isn't an edit: nothing is logged, rewarded or learned. |
 | Copy, 👍, pick best | Angle reward 1 |
 | Edit | Angle reward 0.5 |
 | 👎 (with reason chips), delete | Angle reward 0 |
@@ -56,7 +56,7 @@ Every interaction is a typed event in `feedback_events` and updates one of two l
 **How it's measured**
 
 - **Blind A/B (headline):** same angle, same example posts, same notes; the only difference is your learned rules. Random positions, arms revealed after you choose. Win rate with a Wilson 95% interval.
-- **Trends:** acceptance rate (copied, liked or picked) and edit burden (share of words you change), rolling over 3 batches. Labelled as confounded: users change too.
+- **Trends:** acceptance rate (copied, liked or picked) and words kept (share of each draft's words you keep), rolling over 3 batches. Labelled as confounded: users change too.
 - **Simulated run (read-only showcase):** a fictional founder whose old posts are full of hashtags, emoji, `!` and em dashes,
   and a scripted user who has quietly decided to drop all four. Each round: 3 drafts; the user copies the clean ones,
   fixes the rest by deleting exactly those things (content untouched), picks the best; a blind A/B every other round.
@@ -134,7 +134,7 @@ include fetched posts, so the Langfuse project sees those too.
   percentile. Found while building the calibration pairs.
 - **The case-study angle fired on my own results** ("[name] launched…"). It now needs a third-party name plus a number in the notes.
 - **The rule miner preferred free-form style notes**, which can't be verified. Its prompt now prefers checkable kinds.
-- **Dropped connections lost drafts** (7 of 28 in one simulation run). Each LLM call now retries once on a dropped
+- **Dropped connections lost drafts** (7 of 28 in one showcase run). Each LLM call now retries once on a dropped
   connection, with a 2-minute timeout instead of the SDK's 10.
 - **Refresh on a demo handle would rebuild the shared profile for everyone.** Demo voices stay as seeded, and a refresh with
   no new posts skips the rebuild.
@@ -150,8 +150,10 @@ include fetched posts, so the Langfuse project sees those too.
   There's no length cap now: the voice card gives their average post length as the target, and the angle sets the shape
   only. Length shows as a plain character count.
 - **A Reposts or Likes batch repeated one angle** (those goals have one angle each). Other goals' angles now fill the rest.
-- **The first simulation taught nothing:** its hidden preferences already matched the voice. It now uses a persona whose
+- **The first showcase run taught nothing:** its hidden preferences already matched the voice. It now uses a persona whose
   habits the user wants to drop.
+- **Pasted posts with paragraphs were split into fragments** (blank lines separated posts). A `---` line now separates
+  posts when there is one; otherwise blank lines still do.
 
 ## Designed, not built
 
@@ -190,7 +192,7 @@ cp .env.example .env.local          # fill in keys; DATABASE_URL can be a local 
 pnpm db:migrate
 pnpm dev                            # http://localhost:3333
 pnpm seed:demo                      # fetch demo handles once (X credits)
-pnpm simulate                       # build the read-only simulated showcase (~$1 of OpenAI)
+pnpm showcase                       # build the read-only showcase voice (~$2 of OpenAI)
 pnpm test                           # unit tests (no network)
 pnpm eval:judge                     # judge eval (real API calls)
 ```

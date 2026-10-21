@@ -114,10 +114,12 @@ export function countOccurrences(corpus: string[], phrase: string): number {
   return corpus.reduce((n, t) => n + normalize(t).split(p).length - 1, 0);
 }
 
-/** Splits pasted text into posts: blank lines or "---" lines separate them. */
+const SEPARATOR = /^[ \t]*-{3,}[ \t]*$/m;
+
+/** Splits pasted text into posts: "---" lines separate them; without any, blank lines do (so posts with paragraphs need "---"). */
 export const splitPasted = (pasted: string) =>
   pasted
-    .split(/\n\s*(?:-{3,}\s*)?\n|^-{3,}$/m)
+    .split(SEPARATOR.test(pasted) ? SEPARATOR : /\n\s*\n/)
     .map((s) => s.trim())
     .filter((s) => s.length >= 3);
 

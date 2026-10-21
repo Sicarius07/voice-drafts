@@ -76,8 +76,8 @@ describe("examples", () => {
 
 /** Prompt texts are pinned to their versions: change a prompt → bump its version → update the hash here. */
 const PINNED: Record<string, string> = {
-  "profile-v1": "e74d9206b11a",
-  "gen-v2": "3994695161e9",
+  "profile-v2": "a5d58ff66c86",
+  "gen-v3": "836e08905aab",
   "judge-v1": "9378fee8dd57",
   "humanize-v3": "0773c3f3aec0",
   "rules-v1": "d59e141e22d7",

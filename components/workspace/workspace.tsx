@@ -79,12 +79,6 @@ export function Workspace({ data }: { data: Data }) {
         )}
       </AppHeader>
       <main className={`mx-auto w-full ${WORKSPACE_WIDTH} space-y-5 px-4 py-6`}>
-        {voice.isShowcase && (
-          <p className="rounded-[1.25rem] border border-dashed border-border bg-background/60 px-4 py-3 text-sm backdrop-blur">
-            <strong>Simulated run, read-only.</strong> A scripted user with hidden preferences generated, edited and rated these drafts so you can see the learning loop
-            over 8 rounds. Real voices start empty.
-          </p>
-        )}
         <Tabs.Root defaultValue={voice.isShowcase ? "learning" : "drafts"} orientation={wide ? "vertical" : "horizontal"} className="flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-6">
           <Tabs.List
             aria-label="Workspace"

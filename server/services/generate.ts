@@ -1,6 +1,7 @@
 import "server-only";
 import { angleBrief, eligibleFormulas, FORMULAS, type FormulaId, type Goal } from "@/lib/angles";
 import { engagementLabel, selectExamples, type ExamplePost } from "@/lib/generate/examples";
+import { splitHints } from "@/lib/generate/placeholders";
 import { cleanup, validate, type ValidationContext } from "@/lib/generate/validate";
 import { meter, needsHumanize } from "@/lib/judge/tells";
 import { pickAngles } from "@/lib/learning/bandit";
@@ -101,13 +102,14 @@ async function draftBatch(ctx: VoiceCtx, userId: string, input: GenerateInput, s
 
         const first = await streamText("generate", call, (d) => send({ type: "delta", idx, d }));
         let usage = first.usage;
-        let text = cleanup(first.text);
+        // Placeholder hints ("[your metric: …]") are stored apart from the text; everything downstream sees "[your metric]".
+        let { text, hints } = splitHints(cleanup(first.text));
         let v = validate(text, vctx);
         const repaired = v.errors.length > 0;
         if (repaired) {
-          const fix = await streamText("generate", { ...call, input: repairInput(call, text, v.errors) }, () => {});
+          const fix = await streamText("generate", { ...call, input: repairInput(call, cleanup(first.text), v.errors) }, () => {});
           usage = addUsage(usage, fix.usage);
-          text = cleanup(fix.text);
+          ({ text, hints } = splitHints(cleanup(fix.text)));
           v = validate(text, vctx);
         }
         send({ type: "text", idx, text });
@@ -142,6 +144,7 @@ async function draftBatch(ctx: VoiceCtx, userId: string, input: GenerateInput, s
             tells: check.tells,
             voiceMatch: humanized ? voiceMatch(shown, ctx.profile.stats, ctx.typicality) : check.voiceMatch,
             humanize: humanized && { before: text },
+            placeholderHints: hints,
             usage,
             prompt: `${call.instructions}\n\n---\n\n${call.input}`,
           })

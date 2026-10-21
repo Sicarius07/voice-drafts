@@ -7,26 +7,27 @@ import type { QualityPoint } from "@/lib/learning/metrics";
 // Same unit (% of drafts / % of words), so one shared 0–100 axis. Colors: validated palette slots 1–2.
 const config = {
   acceptance: { label: "Accepted drafts", color: "var(--series-1)" },
-  burden: { label: "Words you changed", color: "var(--series-2)" },
+  kept: { label: "Words kept", color: "var(--series-2)" },
 } satisfies ChartConfig;
+const SHORT = { acceptance: "Accepted", kept: "Kept" };
 
 const pct = (x: number | null) => (x === null ? null : Math.round(x * 100));
 
 export function QualityChart({ series }: { series: QualityPoint[] }) {
   if (series.length < 2)
     return <p className="text-sm text-muted-foreground">The chart appears after two batches. Accept, edit or reject a few drafts to give it data.</p>;
-  const data = series.map((p) => ({ batch: p.batch, acceptance: pct(p.acceptance), burden: pct(p.burden) }));
+  const data = series.map((p) => ({ batch: p.batch, acceptance: pct(p.acceptance), kept: pct(p.kept) }));
   const last = data.length - 1;
   // Lines that end close together get their end labels nudged apart so the labels don't overlap.
-  const [a, b] = [data[last].acceptance, data[last].burden];
+  const [a, b] = [data[last].acceptance, data[last].kept];
   const close = a !== null && b !== null && Math.abs(a - b) < 12;
-  const dy = { acceptance: close ? (a >= b ? -6 : 14) : 4, burden: close ? (a >= b ? 14 : -6) : 4 };
+  const dy = { acceptance: close ? (a >= b ? -6 : 14) : 4, kept: close ? (a >= b ? 14 : -6) : 4 };
   const endLabel = (key: keyof typeof config) =>
     function EndLabel(props: LabelProps) {
       if (props.index !== last || props.value == null) return null;
       return (
         <text x={Number(props.x) + 8} y={Number(props.y)} dy={dy[key]} className="fill-foreground text-[11px]">
-          {config[key].label.split(" ")[0]} {props.value}%
+          {SHORT[key]} {props.value}%
         </text>
       );
     };
@@ -58,8 +59,8 @@ export function QualityChart({ series }: { series: QualityPoint[] }) {
         </LineChart>
       </ChartContainer>
       <figcaption className="text-xs text-muted-foreground">
-        Rolling 3-batch means. Accepted = copied, liked or picked; up is better. Words changed = share of words you change in the drafts you use (used as-is = 0%); down is better. Users change over time
-        too, so the blind A/B test is the cleaner evidence.
+        Rolling 3-batch means; up is better for both. Accepted = copied, liked or picked. Words kept = share of each draft&apos;s words you kept in the drafts you use (used as-is =
+        100%). Users change over time too, so the blind A/B test is the cleaner evidence.
       </figcaption>
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer">Show data</summary>
@@ -68,7 +69,7 @@ export function QualityChart({ series }: { series: QualityPoint[] }) {
             <tr className="text-left">
               <th className="font-medium">Batch</th>
               <th className="font-medium">Accepted</th>
-              <th className="font-medium">Words changed</th>
+              <th className="font-medium">Words kept</th>
             </tr>
           </thead>
           <tbody>
@@ -76,7 +77,7 @@ export function QualityChart({ series }: { series: QualityPoint[] }) {
               <tr key={d.batch}>
                 <td>{d.batch}</td>
                 <td>{d.acceptance}%</td>
-                <td>{d.burden === null ? "–" : `${d.burden}%`}</td>
+                <td>{d.kept === null ? "–" : `${d.kept}%`}</td>
               </tr>
             ))}
           </tbody>

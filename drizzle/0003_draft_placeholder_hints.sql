@@ -1,0 +1,1 @@
+ALTER TABLE "drafts" ADD COLUMN "placeholder_hints" jsonb DEFAULT '[]'::jsonb NOT NULL;

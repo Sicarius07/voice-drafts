@@ -15,7 +15,7 @@ const NO_STATE: DraftState = { thumbs: null, copied: false, picked: false };
 type AbPayload = { choice: AbChoice; winner: string; arms: DraftArm[] };
 
 /** Shapes a stored draft for the UI. Unanswered A/B drafts hide their arm and the rules they used. */
-export function toClientDraft(row: DraftRow, ctx: Pick<VoiceCtx, "rules" | "byId">, state: DraftState = NO_STATE, blind = false): ClientDraft {
+export function toClientDraft(row: DraftRow, ctx: Pick<VoiceCtx, "rules">, state: DraftState = NO_STATE, blind = false): ClientDraft {
   const ruleText = new Map(ctx.rules.map((r) => [r.id, r.text]));
   return {
     id: row.id,
@@ -30,9 +30,9 @@ export function toClientDraft(row: DraftRow, ctx: Pick<VoiceCtx, "rules" | "byId
     voiceMatch: row.voiceMatch,
     warnings: row.validation.warnings,
     humanizedFrom: row.humanize?.before ?? null,
+    hints: row.placeholderHints,
     why: {
       rules: blind ? [] : row.ruleIds.map((id) => ruleText.get(id) ?? "(rule since deleted)"),
-      examples: row.exampleIds.map((id) => ctx.byId.get(id)?.text ?? "").filter(Boolean),
       promptVersion: row.promptVersion,
       model: row.model,
     },
@@ -119,7 +119,7 @@ export async function loadWorkspace(voiceId: string, userId: string) {
 
 export type Workspace = Awaited<ReturnType<typeof loadWorkspace>>;
 
-/** The voices home: the user's voices, demo handles, and the read-only simulated showcase (if seeded). */
+/** The voices home: the user's voices, demo handles, and the read-only showcase voice (if seeded). */
 export async function loadVoicesPage(userId: string) {
   const [mine, demos, showcase] = await Promise.all([
     db

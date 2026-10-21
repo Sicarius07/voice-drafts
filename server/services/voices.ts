@@ -133,7 +133,7 @@ export async function createVoice(userId: string, input: { handle: string; paste
   const username = normalizeHandle(input.handle);
   if (input.pasted !== undefined) {
     const texts = splitPasted(input.pasted);
-    if (texts.length < MIN_PASTED) throw new UserError(`Found ${texts.length} posts; paste at least ${MIN_PASTED}, separated by blank lines.`);
+    if (texts.length < MIN_PASTED) throw new UserError(`Found ${texts.length} posts; paste at least ${MIN_PASTED}, separated by blank lines (or by --- lines if they have paragraphs).`);
     const [account] = await db
       .insert(t.xAccounts)
       .values({ username, name: username })

@@ -67,7 +67,6 @@ const HABIT_LABELS: Partial<Record<BinaryFeature, string>> = {
   list: "list formatting",
 };
 
-export const habits = (s: Stats) =>
-  (Object.keys(HABIT_LABELS) as BinaryFeature[])
-    .filter((k) => s.rates[k] >= 0.1)
-    .map((k) => `${HABIT_LABELS[k]} (${Math.round(s.rates[k] * 100)}% of posts)`);
+export const habitFeatures = (s: Stats) => (Object.keys(HABIT_LABELS) as BinaryFeature[]).filter((k) => s.rates[k] >= 0.1);
+
+export const habits = (s: Stats) => habitFeatures(s).map((k) => `${HABIT_LABELS[k]} (${Math.round(s.rates[k] * 100)}% of posts)`);

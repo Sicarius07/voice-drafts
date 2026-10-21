@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { AppHeader } from "@/components/app-header";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WORKSPACE_WIDTH } from "@/components/workspace/surfaces";
 import { Workspace } from "@/components/workspace/workspace";
 import { requireUser } from "@/server/auth";
 import { UserError } from "@/server/services/context";
@@ -20,11 +21,10 @@ async function WorkspaceLoader({ params }: { params: PageProps<"/voices/[id]">["
 function WorkspaceSkeleton() {
   return (
     <>
-      <AppHeader />
-      <main className="mx-auto w-full max-w-5xl space-y-4 px-4 py-6">
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-48 w-full" />
+      <AppHeader className={WORKSPACE_WIDTH} />
+      <main className={`mx-auto flex w-full ${WORKSPACE_WIDTH} flex-col gap-5 px-4 py-6 lg:flex-row lg:gap-6`}>
+        <Skeleton className="h-10 w-64 rounded-full lg:h-52 lg:w-[4.75rem] lg:rounded-[1.75rem]" />
+        <Skeleton className="h-[28rem] min-w-0 flex-1 rounded-[1.75rem]" />
       </main>
     </>
   );

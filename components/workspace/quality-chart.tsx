@@ -17,11 +17,15 @@ export function QualityChart({ series }: { series: QualityPoint[] }) {
     return <p className="text-sm text-muted-foreground">The chart appears after two batches. Accept, edit or reject a few drafts to give it data.</p>;
   const data = series.map((p) => ({ batch: p.batch, acceptance: pct(p.acceptance), burden: pct(p.burden) }));
   const last = data.length - 1;
+  // Lines that end close together get their end labels nudged apart so the labels don't overlap.
+  const [a, b] = [data[last].acceptance, data[last].burden];
+  const close = a !== null && b !== null && Math.abs(a - b) < 12;
+  const dy = { acceptance: close ? (a >= b ? -6 : 14) : 4, burden: close ? (a >= b ? 14 : -6) : 4 };
   const endLabel = (key: keyof typeof config) =>
     function EndLabel(props: LabelProps) {
       if (props.index !== last || props.value == null) return null;
       return (
-        <text x={Number(props.x) + 8} y={Number(props.y)} dy={4} className="fill-foreground text-[11px]">
+        <text x={Number(props.x) + 8} y={Number(props.y)} dy={dy[key]} className="fill-foreground text-[11px]">
           {config[key].label.split(" ")[0]} {props.value}%
         </text>
       );
@@ -44,7 +48,7 @@ export function QualityChart({ series }: { series: QualityPoint[] }) {
               strokeWidth={2}
               strokeLinecap="round"
               connectNulls
-              dot={{ r: 4, fill: `var(--color-${key})`, stroke: "var(--background)", strokeWidth: 2 }}
+              dot={{ r: 4, fill: `var(--color-${key})`, stroke: "var(--platter)", strokeWidth: 2 }}
               activeDot={{ r: 5 }}
               isAnimationActive={false}
             >

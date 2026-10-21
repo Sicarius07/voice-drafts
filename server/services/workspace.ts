@@ -4,7 +4,6 @@ import { FORMULA_IDS, FORMULAS } from "@/lib/angles";
 import { posteriorMean, PRIOR } from "@/lib/learning/bandit";
 import { abTally, qualitySeries } from "@/lib/learning/metrics";
 import { ACCEPT_TYPES } from "@/lib/learning/signals";
-import { habits } from "@/lib/profile/stats";
 import type { AbChoice, ClientBatch, ClientDraft, DraftArm, DraftState } from "@/lib/types";
 import { db, t } from "@/server/db";
 import { loadVoiceCtx, type VoiceCtx } from "./context";
@@ -102,7 +101,6 @@ export async function loadWorkspace(voiceId: string, userId: string) {
       createdAt: ctx.profile.createdAt.toISOString(),
       stats: ctx.profile.stats,
       qualities: ctx.profile.qualities,
-      habits: habits(ctx.profile.stats),
       signatures: ctx.signatures,
       droppedClaims: ctx.profile.droppedClaims,
       fromPaste: !!ctx.profile.ownerUserId,

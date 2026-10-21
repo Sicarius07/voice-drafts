@@ -26,7 +26,7 @@ function AbPair({ batch, author, readOnly, ctl }: Props) {
   const ready = batch.slots.every((s) => s.status === "done" || s.status === "error");
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
         {batch.slots.map((s, i) => (
           <DraftCard
             key={s.idx}
@@ -40,7 +40,7 @@ function AbPair({ batch, author, readOnly, ctl }: Props) {
         ))}
       </div>
       {!ab && !readOnly && ready && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed p-3">
+        <div className="flex flex-wrap items-center gap-2 rounded-[1.25rem] border border-dashed border-border px-4 py-3">
           <span className="text-sm font-medium">Which would you post?</span>
           {(["a", "b", "tie", "neither"] as const).map((c) => (
             <Button key={c} size="sm" variant={c.length === 1 ? "default" : "outline"} onClick={() => choose(c)}>
@@ -67,7 +67,7 @@ export function BatchView(props: Props) {
   };
   return (
     <section className="space-y-3">
-      <header className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <header className="flex flex-wrap items-center gap-2 px-1 text-xs text-muted-foreground">
         <span>{batch.kind === "ab" ? "Blind comparison" : `${batch.slots.length} draft${batch.slots.length === 1 ? "" : "s"}`}</span>
         <span>· goal {batch.goal}</span>
         {batch.topic && <span>· {batch.topic}</span>}
@@ -83,7 +83,7 @@ export function BatchView(props: Props) {
       {batch.kind === "ab" ? (
         <AbPair {...props} />
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
           {batch.slots.map((s) => (
             <DraftCard key={s.idx} slot={s} author={author} readOnly={readOnly} onPatch={ctl.patchDraft} onAllow={ctl.allow} />
           ))}

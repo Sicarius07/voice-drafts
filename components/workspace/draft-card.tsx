@@ -49,7 +49,7 @@ function CharCount({ text }: { text: string }) {
 
 function CardShell({ author, angle, label, children }: { author: Author; angle: string; label?: string; children: React.ReactNode }) {
   return (
-    <article className="min-w-0 space-y-3 rounded-xl border bg-card p-4">
+    <article className="min-w-0 space-y-3 rounded-[1.25rem] bg-platter p-4 sm:p-5">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <HandleAvatar name={author.name} src={author.avatarUrl} />
         <div className="min-w-32 flex-1 leading-tight">
@@ -165,12 +165,12 @@ export function DraftCard({ slot, author, readOnly, label, onPatch, onAllow }: C
       <footer className="flex flex-wrap items-center gap-1 border-t pt-2">
         {!readOnly && (
           <>
-            <Button size="icon-sm" variant={d.state.thumbs === "up" ? "secondary" : "ghost"} aria-label="Good draft" onClick={() => feedback("thumbs_up", { state: { ...d.state, thumbs: "up" } })}>
+            <Button size="icon-sm" variant={d.state.thumbs === "up" ? "outline" : "ghost"} aria-label="Good draft" onClick={() => feedback("thumbs_up", { state: { ...d.state, thumbs: "up" } })}>
               <ThumbsUpIcon />
             </Button>
             <Popover>
               <PopoverTrigger asChild>
-                <Button size="icon-sm" variant={d.state.thumbs === "down" ? "secondary" : "ghost"} aria-label="Bad draft">
+                <Button size="icon-sm" variant={d.state.thumbs === "down" ? "outline" : "ghost"} aria-label="Bad draft">
                   <ThumbsDownIcon />
                 </Button>
               </PopoverTrigger>
@@ -191,7 +191,7 @@ export function DraftCard({ slot, author, readOnly, label, onPatch, onAllow }: C
             <Button size="sm" variant="ghost" onClick={copy}>
               <CopyIcon /> Copy
             </Button>
-            <Button size="sm" variant={d.state.picked ? "secondary" : "ghost"} onClick={() => feedback("pick", { state: { ...d.state, picked: true } })} disabled={d.state.picked}>
+            <Button size="sm" variant={d.state.picked ? "outline" : "ghost"} onClick={() => feedback("pick", { state: { ...d.state, picked: true } })} disabled={d.state.picked}>
               <StarIcon /> {d.state.picked ? "Best" : "Pick best"}
             </Button>
             <Button size="icon-sm" variant="ghost" aria-label="Delete draft" onClick={() => feedback("delete", null)}>

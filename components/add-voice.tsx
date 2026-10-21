@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Panel } from "@/components/workspace/surfaces";
 import { postStream } from "@/lib/ndjson-client";
 import { MIN_PASTED, splitPasted } from "@/lib/text";
 
@@ -88,9 +89,8 @@ export function AddVoice({ demos }: { demos: { username: string; name: string }[
           Or paste your posts instead
         </button>
       ) : (
-        <div className="space-y-2 rounded-xl border p-3">
-          <p className="text-sm font-medium">Paste at least {MIN_PASTED} of your posts, separated by blank lines</p>
-          <Textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={8} placeholder={"first post\n\nsecond post\n\n…"} />
+        <Panel title={`Paste at least ${MIN_PASTED} of your posts, separated by blank lines`} className="space-y-2">
+          <Textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={8} placeholder={"first post\n\nsecond post\n\n…"} className="bg-background" />
           <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
             <span>
               {pastedCount} post{pastedCount === 1 ? "" : "s"} detected · fewer posts = lower confidence
@@ -99,7 +99,7 @@ export function AddVoice({ demos }: { demos: { username: string; name: string }[
               Build from pasted posts
             </Button>
           </div>
-        </div>
+        </Panel>
       )}
     </section>
   );

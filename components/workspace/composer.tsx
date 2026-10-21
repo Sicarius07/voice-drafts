@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { GOALS, type Goal } from "@/lib/angles";
 import { PLACEHOLDERS } from "@/lib/text";
+import { Panel } from "./surfaces";
 import type { GenerateRequest } from "./use-batches";
 
 function Chips<T extends string | number | null>({ label, options, value, onChange }: { label: string; options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
@@ -14,7 +15,7 @@ function Chips<T extends string | number | null>({ label, options, value, onChan
     <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label={label}>
       <span className="mr-1 w-14 text-xs text-muted-foreground">{label}</span>
       {options.map((o) => (
-        <Button key={String(o.value)} type="button" size="xs" role="radio" aria-checked={value === o.value} variant={value === o.value ? "secondary" : "ghost"} onClick={() => onChange(o.value)}>
+        <Button key={String(o.value)} type="button" size="xs" role="radio" aria-checked={value === o.value} variant={value === o.value ? "outline" : "ghost"} onClick={() => onChange(o.value)}>
           {o.label}
         </Button>
       ))}
@@ -30,7 +31,7 @@ export function Composer({ topics, canCompare, busy, onGenerate }: { topics: str
   const request = (mode: GenerateRequest["mode"]): GenerateRequest => ({ goal, topic, notes, n, mode });
 
   return (
-    <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
+    <Panel className="space-y-3">
       <Textarea
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
@@ -61,6 +62,6 @@ export function Composer({ topics, canCompare, busy, onGenerate }: { topics: str
           </Button>
         </div>
       </div>
-    </div>
+    </Panel>
   );
 }
